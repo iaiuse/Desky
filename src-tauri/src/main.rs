@@ -6,7 +6,7 @@ mod logger;
 
 use crate::logger::setup_logging;
 use log;
-use std::fs;
+//use std::fs;
 
 #[tauri::command]
 fn greet(name: &str) -> String {

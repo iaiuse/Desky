@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, FolderOpen, Settings, HelpCircle,  ClipboardList } from 'lucide-react';
+import { Home, Settings, HelpCircle,  ClipboardList } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const Sidebar: React.FC = () => {
@@ -7,7 +7,6 @@ export const Sidebar: React.FC = () => {
 
   const navItems = [
     { name: 'Home', icon: Home, path: '/' },
-    { name: 'Projects', icon: FolderOpen, path: '/projects' },
     { name: 'Settings', icon: Settings, path: '/settings' },
     { name: 'Help', icon: HelpCircle, path: '/help' },
     { name: 'Log', icon: ClipboardList, path: '/log' },
@@ -15,7 +14,7 @@ export const Sidebar: React.FC = () => {
 
   return (
     <div className="w-64 bg-gray-800 text-white p-4 h-screen">
-      <h1 className="text-2xl font-bold mb-8">Video Creation Tool</h1>
+      <h1 className="text-2xl font-bold mb-8">Desky</h1>
       <nav>
         <ul>
           {navItems.map((item) => (
