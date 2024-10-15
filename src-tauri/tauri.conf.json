@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "Desky",
-    "version": "0.1.0"
+    "version": "0.8.0"  
   },
   "tauri": {
     "allowlist": {
@@ -24,7 +24,7 @@
         "height": 800,
         "resizable": true,
         "title": "Desky",
-        "width": 1280,
+        "width": 1200,
         "minHeight": 600,
         "minWidth": 800
       }

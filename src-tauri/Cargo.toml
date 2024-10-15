@@ -1,16 +1,22 @@
 [package]
-name = "desky"
-version = "0.1.0"
-description = "A Tauri App"
+name = "Desky"
+version = "0.5.0"
+description = "A Tauri App for Desktop Chat Bot"
 authors = ["youtube@iaiuse.com"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "1.0.0", features = [] }
+tauri-build = { version = "1", features = [] }
 
 [dependencies]
-tauri = { version = "1.0.0", features = ["shell-open"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+chrono = "0.4"
+log = { version = "0.4", features = ["std"] }
+tauri = { version = "1.0", features = [ "shell-open"] }
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.12", features = ["macros", "rt-multi-thread"] }
+
+[features]
+# This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
