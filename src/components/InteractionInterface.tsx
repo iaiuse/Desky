@@ -7,6 +7,13 @@ import { Slider } from '@/components/ui/slider';
 import { invoke } from '@tauri-apps/api/tauri';
 import { DebugPanel } from './DebugPanel';
 import VideoFeed from './VideoFeed';
+import { generateResponse, generateSpeech } from '../lib/openai';
+import { setServoPosition, initializeServo, moveServoToFace } from '../lib/servoControl';
+import { db } from '../lib/db';
+import { logger } from '../utils/logger';
+import { SystemStatusCard } from './SystemStatusCard';
+
+const ModelName = "InteractionInterface";
 
 export const InteractionInterface: React.FC = () => {
   const [prompt, setPrompt] = useState('');
@@ -15,28 +22,87 @@ export const InteractionInterface: React.FC = () => {
   const [deviceStatus, setDeviceStatus] = useState('Checking...');
   const [servoX, setServoX] = useState(90);
   const [servoY, setServoY] = useState(90);
+  const [deviceId, setDeviceId] = useState('');
+  const [ipAddress, setIpAddress] = useState('');
 
   useEffect(() => {
-    // Implement actual status checks here
-    setTimeout(() => setNetworkStatus('Connected'), 1000);
-    setTimeout(() => setDeviceStatus('Online'), 1500);
+    const initializeComponent = async () => {
+      try {
+        const deviceNameSetting = await db.settings.get('deviceName');
+        const phoneIpSetting = await db.settings.get('phoneIpAddress');
+
+        logger.log(`deviceNameSetting: ${JSON.stringify(deviceNameSetting)}`, 'INFO', ModelName);
+        logger.log(`phoneIpSetting: ${JSON.stringify(phoneIpSetting)}`, 'INFO', ModelName);
+
+        setDeviceId(deviceNameSetting?.value || 'Not set');
+        setIpAddress(phoneIpSetting?.value || 'Not set');
+
+        logger.log(`deviceNameSetting: ${deviceNameSetting?.value || 'Not set'}`, 'INFO', ModelName);
+        logger.log(`phoneIpSetting: ${phoneIpSetting?.value || 'Not set'}`, 'INFO', ModelName);
+
+        await initializeServo();
+
+        const networkCheck = await invoke('check_network_status');
+        setNetworkStatus(networkCheck ? 'Connected' : 'Disconnected');
+
+        const deviceCheck = await invoke('check_device_status');
+        setDeviceStatus(deviceCheck ? 'Online' : 'Offline');
+
+        logger.log(`Network Status: ${networkCheck ? 'Connected' : 'Disconnected'}`, 'INFO', ModelName);
+        logger.log(`Device Status: ${deviceCheck ? 'Online' : 'Offline'}`, 'INFO', ModelName);
+      } catch (error) {
+        console.error('Error initializing component:', error);
+        logger.log(`Error initializing component: ${error}`, 'ERROR', ModelName);
+        setNetworkStatus('Error');
+        setDeviceStatus('Error');
+      }
+    };
+
+    initializeComponent();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setResponse('Processing...');
-    // Implement actual API call to language model here
-    setTimeout(() => setResponse('This is a simulated response from the robot.'), 1000);
+    try {
+      const result = await generateResponse(prompt);
+      setResponse(result.response);
+
+      // Generate speech
+      await generateSpeech(result.response);
+      // TODO: Implement speech playback
+
+      // Move servo based on response
+      if (result.servoX !== undefined && result.servoY !== undefined) {
+        await setServoPosition({ x: result.servoX, y: result.servoY });
+        setServoX(result.servoX);
+        setServoY(result.servoY);
+      }
+    } catch (error) {
+      console.error('Error processing request:', error);
+      logger.log(`Error processing request: ${error}`, 'ERROR', ModelName);
+      setResponse('An error occurred while processing your request.');
+    }
   };
 
   const handleServoControl = async (axis: 'X' | 'Y', value: number) => {
     if (axis === 'X') setServoX(value);
     else setServoY(value);
-    
+
     try {
-      await invoke('set_servo_position', { x: servoX, y: servoY });
+      await setServoPosition({ x: servoX, y: servoY });
     } catch (error) {
       console.error('Failed to set servo position:', error);
+      logger.log(`Failed to set servo position: ${error}`, 'ERROR', ModelName);
+    }
+  };
+
+  const handleFaceDetected = async (facePosition: { x: number, y: number }, canvasSize: { width: number, height: number }) => {
+    try {
+      await moveServoToFace(facePosition, canvasSize);
+    } catch (error) {
+      console.error('Failed to move servo to face:', error);
+      logger.log(`Failed to move servo to face: ${error}`, 'ERROR', ModelName);
     }
   };
 
@@ -66,23 +132,12 @@ export const InteractionInterface: React.FC = () => {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>System Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Alert>
-                <AlertTitle>Network Status</AlertTitle>
-                <AlertDescription>{networkStatus}</AlertDescription>
-              </Alert>
-              <Alert>
-                <AlertTitle>Device Status</AlertTitle>
-                <AlertDescription>{deviceStatus}</AlertDescription>
-              </Alert>
-            </div>
-          </CardContent>
-        </Card>
+        <SystemStatusCard
+          networkStatus={networkStatus}
+          deviceStatus={deviceStatus}
+          deviceId={deviceId}
+          ipAddress={ipAddress}
+        />
 
         <Card>
           <CardHeader>
@@ -115,14 +170,7 @@ export const InteractionInterface: React.FC = () => {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Video Feed</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <VideoFeed />
-        </CardContent>
-      </Card>
+      <VideoFeed onFaceDetected={handleFaceDetected} />
 
       <DebugPanel onServoControl={handleServoControl} />
     </div>

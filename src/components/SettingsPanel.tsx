@@ -4,7 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db } from '../lib/db';
+import { useSerialPorts } from '../hooks/useSerialPorts';
 
 interface SettingsPanelProps {
   setIsConfigured?: (value: boolean) => void;
@@ -17,8 +19,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     modelName: '',
     deviceName: '',
     phoneIpAddress: '',
-    systemPrompt: ''
+    systemPrompt: '',
+    serialPort: ''
   });
+
+  const { ports, loading, error } = useSerialPorts();
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -35,6 +40,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
 
   const handleChange = (key: keyof typeof settings, value: string) => {
     setSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSerialPortChange = (value: string) => {
+    setSettings(prev => ({
+      ...prev,
+      serialPort: value,
+      deviceName: value.split('/').pop() || value // Extract the last part of the path as device name
+    }));
   };
 
   const saveSettings = async () => {
@@ -103,6 +116,27 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
             <CardHeader>设备设置</CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <div>
+                  <label className="block mb-1">串口</label>
+                  <Select
+                    value={settings.serialPort}
+                    onValueChange={handleSerialPortChange}
+                    disabled={loading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择串口" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loading && <SelectItem value="loading">加载中...</SelectItem>}
+                      {error && <SelectItem value="error">错误: {error}</SelectItem>}
+                      {ports.map((port) => (
+                        <SelectItem key={port} value={port}>
+                          {port}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div>
                   <label className="block mb-1">设备名称</label>
                   <Input
