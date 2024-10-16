@@ -14,6 +14,28 @@ Desky 是一个融合了人工智能对话、计算机视觉和硬件控制的�
 4. **情感表达**：通过头部动作，Desky 能表达简单的情感和反应。
 5. **个性化助手**：从日程提醒到信息查询，Desky 都能胜任。
 
+## 部分截图
+主要交互界面
+![主要交互界面](https://github.com/user-attachments/assets/dd888011-fc47-4171-bb61-41453143275e)
+
+设备状态
+![image](https://github.com/user-attachments/assets/3e5444c8-2c49-480e-9c79-b2d9e7bc83ea)
+
+![image](https://github.com/user-attachments/assets/2c8808a8-2fe4-4e74-8c39-7973db597eb5)
+
+设置界面-api设置，就是用来生成表情的
+
+![image](https://github.com/user-attachments/assets/5a0fc2c0-ee23-4120-be63-9eccba212063)
+
+
+设置界面-设备设置
+![image](https://github.com/user-attachments/assets/0475562c-3ec4-44c3-9a54-017a6ecbdb1b)
+
+![image](https://github.com/user-attachments/assets/eb605525-3816-4fce-b9dc-4e246cb2f8d0)
+
+设置界面-tts
+![image](https://github.com/user-attachments/assets/591af8d8-c750-419a-9271-ff144bee2c16)
+
 
 ## 原理
 
