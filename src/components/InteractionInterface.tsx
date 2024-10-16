@@ -7,7 +7,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { DebugPanel } from './DebugPanel';
 import VideoFeed from './VideoFeed';
 import { generateResponse, generateSpeech } from '../lib/openai';
-import { setServoPosition, initializeServo, moveServoToFace, ServoConfig } from '../lib/servoControl';
+import { setServoPosition, initializeServo, moveServoToFace, ServoConfig, checkDeviceStatus } from '../lib/servoControl';
 import { db } from '../lib/db';
 import { logger } from '../utils/logger';
 import { SystemStatusCard } from './SystemStatusCard';
@@ -23,7 +23,10 @@ export const InteractionInterface: React.FC = () => {
   const [servoY, setServoY] = useState(90);
   const [deviceName, setDeviceName] = useState('');
   const [ipAddress, setIpAddress] = useState('');
-  const [servoConfig, setServoConfig] = useState<ServoConfig | null>(null);
+  const [servoConfig, setServoConfig] = useState<ServoConfig>({
+    deviceName: 'Default Device',
+    ipAddress: 'Default IP'
+  });
 
   useEffect(() => {
     const initializeComponent = async () => {
@@ -49,16 +52,20 @@ export const InteractionInterface: React.FC = () => {
         };
         setServoConfig(config);
 
-        await initializeServo(config);
-
-        const networkCheck = await invoke('check_network_status');
-        setNetworkStatus(networkCheck ? 'Connected' : 'Disconnected');
-
-        const deviceCheck = await invoke('check_device_status');
+        const deviceCheck = await checkDeviceStatus(config);
         setDeviceStatus(deviceCheck ? 'Online' : 'Offline');
+        logger.log(`Device Status: ${deviceStatus}`, 'INFO', ModelName);
 
-        logger.log(`Network Status: ${networkCheck ? 'Connected' : 'Disconnected'}`, 'INFO', ModelName);
-        logger.log(`Device Status: ${deviceCheck ? 'Online' : 'Offline'}`, 'INFO', ModelName);
+        if (deviceCheck) {
+          await initializeServo(config);
+          logger.log(`initializeServo success`, 'INFO', ModelName);
+        }
+
+        //const networkCheck = await invoke('check_network_status');
+        //setNetworkStatus(networkCheck ? 'Connected' : 'Disconnected');
+
+        logger.log(`Network Status: ${networkStatus}`, 'INFO', ModelName);
+        
       } catch (error) {
         console.error('Error initializing component:', error);
         logger.log(`Error initializing component: ${error}`, 'ERROR', ModelName);
@@ -187,7 +194,10 @@ export const InteractionInterface: React.FC = () => {
 
       <VideoFeed onFaceDetected={handleFaceDetected} />
 
-      <DebugPanel onServoControl={handleServoControl} />
+      <DebugPanel 
+        onServoControl={handleServoControl} 
+        servoConfig={servoConfig}
+        />
     </div>
   );
 };

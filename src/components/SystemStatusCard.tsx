@@ -24,22 +24,22 @@ export const SystemStatusCard: React.FC<SystemStatusProps> = ({
         <div className="space-y-2">
           <Alert>
             <AlertTitle className="flex justify-between items-center">
-              <span className="font-bold">Network</span>
+              <span className="font-bold">Device</span>
               <span className="text-sm">{deviceId || 'N/A'}</span>
             </AlertTitle>
             <AlertDescription className="flex justify-between items-center mt-1">
               <span>Status:</span>
-              <span>{networkStatus}</span>
+              <span>{deviceStatus}</span>
             </AlertDescription>
           </Alert>
           <Alert>
             <AlertTitle className="flex justify-between items-center">
-              <span className="font-bold">Device</span>
+              <span className="font-bold">Network</span>
               <span className="text-sm">{ipAddress || 'N/A'}</span>
             </AlertTitle>
             <AlertDescription className="flex justify-between items-center mt-1">
               <span>Status:</span>
-              <span>{deviceStatus}</span>
+              <span>{networkStatus}</span>
             </AlertDescription>
           </Alert>
         </div>

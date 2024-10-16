@@ -65,3 +65,20 @@ export async function moveServoToFace(facePosition: { x: number, y: number }, ca
     throw error;
   }
 }
+
+export async function checkDeviceStatus(config: ServoConfig): Promise<boolean> {
+  try {
+    logger.log(`Checking device status for ${config.deviceName}`, 'INFO', ModelName);
+    
+    const status = await invoke('check_device_status', { 
+      deviceName: config.deviceName
+    });
+    
+    logger.log(`Device status check result: ${status}`, 'INFO', ModelName);
+    return status as boolean;
+  } catch (error) {
+    logger.log(`Failed to check device status: ${error}`, 'ERROR', ModelName);
+    console.error('Failed to check device status:', error);
+    throw error;
+  }
+}
