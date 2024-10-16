@@ -26,7 +26,7 @@ async function getTTSSettings(): Promise<TTSSettings> {
   };
 }
 
-export async function generateSpeech(text: string): Promise<ArrayBuffer> {
+export async function generateSpeech(text: string, voiceId: string): Promise<ArrayBuffer> {
   try {
     logger.log(`Generating speech for text: ${text}`, 'INFO', ModelName);
     const settings = await getTTSSettings();
@@ -44,7 +44,7 @@ export async function generateSpeech(text: string): Promise<ArrayBuffer> {
         text: text,
         stream: false,
         voice_setting: {
-          voice_id: "male-qn-qingse",
+          voice_id: voiceId || "male-qn-qingse",
           speed: 1,
           vol: 1,
           pitch: 0

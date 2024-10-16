@@ -8,11 +8,14 @@ import VideoFeed from './VideoFeed';
 import { generateResponse } from '../lib/openai';
 import { generateSpeech } from '@/lib/tts';
 import { setServoPosition, initializeServo, moveServoToFace, ServoConfig, checkDeviceStatus } from '../lib/servoControl';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 import { db } from '../lib/db';
 import { logger } from '../utils/logger';
 import { SystemStatusCard } from './SystemStatusCard';
 import { checkMobilePhoneStatus, initializeConnection, mobilePhoneConfig } from '../lib/phoneCommunication';
 import AudioPlayer from './AudioPlayer';
+import { defaultVoices } from '../lib/voiceSettings';
 
 const ModelName = "InteractionInterface";
 
@@ -35,6 +38,34 @@ export const InteractionInterface: React.FC = () => {
     port: 12345
   });
   const [audioBuffer, setAudioBuffer] = useState<ArrayBuffer | null>(null);
+
+  const [voices, setVoices] = useState<Array<{ id: string, name: string }>>(defaultVoices);
+  const [selectedVoice, setSelectedVoice] = useState<string>(defaultVoices[0].id);
+
+  useEffect(() => {
+    const loadVoices = async () => {
+      try {
+        const voicesSetting = await db.settings.get('voices');
+        if (voicesSetting && Array.isArray(voicesSetting.value)) {
+          setVoices(voicesSetting.value);
+          if (voicesSetting.value.length > 0) {
+            setSelectedVoice(voicesSetting.value[0].id);
+          }
+        } else {
+          logger.log('Using default voices', 'INFO', ModelName);
+        }
+      } catch (error) {
+        logger.log(`Error loading voices: ${error}`, 'ERROR', ModelName);
+      }
+    };
+
+    loadVoices();
+  }, []);
+
+  const handleVoiceChange = (value: string) => {
+    setSelectedVoice(value);
+    // You might want to update the TTS settings here or when generating speech
+  };
 
   useEffect(() => {
     const initializeComponent = async () => {
@@ -122,7 +153,7 @@ export const InteractionInterface: React.FC = () => {
       const result = await generateResponse(prompt);
       setResponse(result.response);
   
-      const newAudioBuffer = await generateSpeech(result.response);
+      const newAudioBuffer = await generateSpeech(result.response, selectedVoice);
       setAudioBuffer(newAudioBuffer);
   
       if (result.servoX !== undefined && result.servoY !== undefined && servoConfig) {
@@ -169,8 +200,20 @@ export const InteractionInterface: React.FC = () => {
   return (
     <div className="container mx-auto p-4 space-y-6">
       <Card>
-        <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle>Robot Interaction</CardTitle>
+          <Select value={selectedVoice} onValueChange={handleVoiceChange}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select voice" />
+            </SelectTrigger>
+            <SelectContent>
+              {voices.map((voice) => (
+                <SelectItem key={voice.id} value={voice.id}>
+                  {voice.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
