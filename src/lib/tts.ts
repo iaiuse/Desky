@@ -63,21 +63,19 @@ export async function generateSpeech(text: string): Promise<ArrayBuffer> {
     }
 
     const result = await response.json();
-    logger.log(`API Response: ${JSON.stringify(result)}`, 'INFO', ModelName);
+    logger.log(`API Response received`, 'INFO', ModelName);
     logger.log(`Speech generated successfully`, 'INFO', ModelName);
 
-    // Assuming the API returns the audio data in the 'audio' field as a base64 string
-    const audioBase64 = result.data.audio;
-    logger.log(`Audio data received (first 100 chars): ${audioBase64.substring(0, 100)}`, 'INFO', ModelName);
+    // API returns audio data as a hex string
+    const audioHex = result.data.audio;
+    logger.log(`Audio data received (first 100 chars): ${audioHex.substring(0, 100)}`, 'INFO', ModelName);
 
-    // Convert base64 to ArrayBuffer
-    const binaryString = window.atob(audioBase64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+    // Convert hex string to ArrayBuffer
+    const audioBuffer = new ArrayBuffer(audioHex.length / 2);
+    const view = new Uint8Array(audioBuffer);
+    for (let i = 0; i < audioHex.length; i += 2) {
+      view[i / 2] = parseInt(audioHex.substr(i, 2), 16);
     }
-    const audioBuffer = bytes.buffer;
     
     logger.log(`Speech buffer created, size: ${audioBuffer.byteLength} bytes`, 'INFO', ModelName);
     return audioBuffer;

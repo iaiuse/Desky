@@ -21,6 +21,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer }) => {
         audioRef.current.src = url;
         audioRef.current.load();
       }
+      return () => URL.revokeObjectURL(url);
     }
   }, [audioBuffer]);
 
@@ -29,7 +30,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer }) => {
       if (isPlaying) {
         audioRef.current.pause();
       } else {
-        audioRef.current.play();
+        audioRef.current.play().catch(e => console.error("Playback failed", e));
       }
       setIsPlaying(!isPlaying);
     }
@@ -66,7 +67,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer }) => {
         </Button>
         <Slider
           min={0}
-          max={duration}
+          max={duration || 100}
           step={0.1}
           value={[progress]}
           onValueChange={handleSliderChange}
