@@ -67,3 +67,110 @@ Desky 主要包含以下几个核心组件：
 ## 许可证
 
 本项目采用 MIT 许可证。详情请见 [LICENSE](LICENSE) 文件。
+
+# 如果是比较旧的mac电脑，比如 macOS 11（Big Sur）：
+
+1. 关于 macOS 11 的警告：
+   虽然 Homebrew 官方不再支持 macOS 11，但这并不意味着我们不能继续使用它。只是在遇到问题时，可能需要更多的耐心和自行解决的能力。
+
+2. 权限问题：
+   这是我们当前可以解决的主要问题。请按照以下步骤操作：
+
+   a. 首先，更改目录的所有权：
+      ```
+      sudo chown -R $(whoami) /usr/local/bin /usr/local/share/man/man1
+      ```
+   
+   b. 然后，确保你有写入权限：
+      ```
+      chmod u+w /usr/local/bin /usr/local/share/man/man1
+      ```
+
+3. 更新 Homebrew：
+   尽管你使用的是旧版 macOS，但保持 Homebrew 更新仍然很重要：
+   ```
+   brew update
+   ```
+
+4. 安装或更新必要的软件：
+   ```
+   brew install llvm opencv
+   brew upgrade llvm opencv
+   ```
+
+5. 设置环境变量：
+   将以下内容添加到你的 `~/.zshrc` 或 `~/.bash_profile` 文件中：
+
+   ```bash
+   export LLVM_HOME="/usr/local/opt/llvm"
+   export PATH="$LLVM_HOME/bin:$PATH"
+   export LDFLAGS="-L$LLVM_HOME/lib"
+   export CPPFLAGS="-I$LLVM_HOME/include"
+   export OPENCV_LIB_DIR="/usr/local/opt/opencv/lib"
+   export OPENCV_INCLUDE_DIR="/usr/local/opt/opencv/include/opencv4"
+   ```
+
+   然后重新加载配置：
+   ```
+   source ~/.zshrc   # 或 source ~/.bash_profile
+   ```
+
+6. 对于 OpenCV 的编译问题，我们可以尝试使用系统级的 OpenCV 而不是通过 Cargo 编译。在你的 `Cargo.toml` 文件中，修改 OpenCV 依赖如下：
+
+
+
+```toml
+[dependencies]
+tauri = { version = "1.0", features = ["shell-open"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+opencv = { version = "0.63", features = ["clang-runtime"], default-features = false }
+serialport = "4.2"
+log = "0.4"
+
+[build-dependencies]
+pkg-config = "0.3"
+
+```
+
+7. 在你的项目根目录创建一个 `build.rs` 文件，内容如下：
+
+```rust
+fn main() {
+    pkg_config::probe_library("opencv").unwrap();
+}
+
+```
+
+8. 清理之前的构建并重新尝试：
+   ```
+   cargo clean
+   cargo build
+   ```
+
+如果在执行这些步骤后仍然遇到问题，请提供新的错误信息。我们可能需要考虑以下备选方案：
+
+1. 使用较旧版本的 OpenCV：在 `Cargo.toml` 中指定 `opencv = "0.62"`。
+
+2. 考虑使用其他视频处理库：如 `gstreamer`，虽然这需要对代码进行一些修改。
+
+3. 如果可能的话，考虑更新你的 macOS 版本。这可能会解决许多兼容性问题。
+
+# 如果需要安装cmake
+# 下载 CMake 源代码
+curl -O https://github.com/Kitware/CMake/releases/download/v3.30.5/cmake-3.30.5.tar.gz
+
+# 解压源代码
+tar -xzvf cmake-3.30.5.tar.gz
+
+# 进入源代码目录
+cd cmake-3.30.5
+
+# 配置
+./bootstrap
+
+# 编译
+make
+
+# 安装
+sudo make install

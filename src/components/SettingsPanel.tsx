@@ -46,7 +46,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     setSettings(prev => ({
       ...prev,
       serialPort: value,
-      deviceName: value.split('/').pop() || value // Extract the last part of the path as device name
+      deviceName: value // Extract the last part of the path as device name
     }));
   };
 

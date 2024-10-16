@@ -9,6 +9,7 @@ edition = "2021"
 
 [build-dependencies]
 tauri-build = { version = "1", features = [] }
+pkg-config = "0.3"
 
 [dependencies]
 chrono = "0.4"
@@ -18,7 +19,23 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.12", features = ["macros", "rt-multi-thread"] }
 serialport = "4.2.0"
+image = "0.23.14"
+rustface = "0.1.5"
+gstreamer = "0.19.2"
+gstreamer-video = "0.19.2"
+gstreamer-app = "0.19.2"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
+
+
+[package.metadata.pkg-config]
+opencv4 = "4.0"
+
+[package.metadata.vcpkg]
+git = "https://github.com/microsoft/vcpkg"
+rev = "a42af01"
+
+[package.metadata.vcpkg.target]
+x86_64-apple-darwin = { triplet = "x64-osx" }

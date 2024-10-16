@@ -2,13 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Slider } from '@/components/ui/slider';
 import { invoke } from '@tauri-apps/api/tauri';
 import { DebugPanel } from './DebugPanel';
 import VideoFeed from './VideoFeed';
 import { generateResponse, generateSpeech } from '../lib/openai';
-import { setServoPosition, initializeServo, moveServoToFace } from '../lib/servoControl';
+import { setServoPosition, initializeServo, moveServoToFace, ServoConfig } from '../lib/servoControl';
 import { db } from '../lib/db';
 import { logger } from '../utils/logger';
 import { SystemStatusCard } from './SystemStatusCard';
@@ -22,8 +21,9 @@ export const InteractionInterface: React.FC = () => {
   const [deviceStatus, setDeviceStatus] = useState('Checking...');
   const [servoX, setServoX] = useState(90);
   const [servoY, setServoY] = useState(90);
-  const [deviceId, setDeviceId] = useState('');
+  const [deviceName, setDeviceName] = useState('');
   const [ipAddress, setIpAddress] = useState('');
+  const [servoConfig, setServoConfig] = useState<ServoConfig | null>(null);
 
   useEffect(() => {
     const initializeComponent = async () => {
@@ -34,13 +34,22 @@ export const InteractionInterface: React.FC = () => {
         logger.log(`deviceNameSetting: ${JSON.stringify(deviceNameSetting)}`, 'INFO', ModelName);
         logger.log(`phoneIpSetting: ${JSON.stringify(phoneIpSetting)}`, 'INFO', ModelName);
 
-        setDeviceId(deviceNameSetting?.value || 'Not set');
-        setIpAddress(phoneIpSetting?.value || 'Not set');
+        const deviceName = deviceNameSetting?.value || 'Not set';
+        const ipAddress = phoneIpSetting?.value || 'Not set';
 
-        logger.log(`deviceNameSetting: ${deviceNameSetting?.value || 'Not set'}`, 'INFO', ModelName);
-        logger.log(`phoneIpSetting: ${phoneIpSetting?.value || 'Not set'}`, 'INFO', ModelName);
+        setDeviceName(deviceName);
+        setIpAddress(ipAddress);
 
-        await initializeServo();
+        logger.log(`Device Name: ${deviceName}`, 'INFO', ModelName);
+        logger.log(`IP Address: ${ipAddress}`, 'INFO', ModelName);
+
+        const config: ServoConfig = {
+          deviceName: deviceName,
+          ipAddress: ipAddress
+        };
+        setServoConfig(config);
+
+        await initializeServo(config);
 
         const networkCheck = await invoke('check_network_status');
         setNetworkStatus(networkCheck ? 'Connected' : 'Disconnected');
@@ -68,13 +77,11 @@ export const InteractionInterface: React.FC = () => {
       const result = await generateResponse(prompt);
       setResponse(result.response);
 
-      // Generate speech
       await generateSpeech(result.response);
       // TODO: Implement speech playback
 
-      // Move servo based on response
-      if (result.servoX !== undefined && result.servoY !== undefined) {
-        await setServoPosition({ x: result.servoX, y: result.servoY });
+      if (result.servoX !== undefined && result.servoY !== undefined && servoConfig) {
+        await setServoPosition({ x: result.servoX, y: result.servoY }, servoConfig);
         setServoX(result.servoX);
         setServoY(result.servoY);
       }
@@ -90,7 +97,11 @@ export const InteractionInterface: React.FC = () => {
     else setServoY(value);
 
     try {
-      await setServoPosition({ x: servoX, y: servoY });
+      if (servoConfig) {
+        await setServoPosition({ x: servoX, y: servoY }, servoConfig);
+      } else {
+        throw new Error('Servo configuration not initialized');
+      }
     } catch (error) {
       console.error('Failed to set servo position:', error);
       logger.log(`Failed to set servo position: ${error}`, 'ERROR', ModelName);
@@ -99,7 +110,11 @@ export const InteractionInterface: React.FC = () => {
 
   const handleFaceDetected = async (facePosition: { x: number, y: number }, canvasSize: { width: number, height: number }) => {
     try {
-      await moveServoToFace(facePosition, canvasSize);
+      if (servoConfig) {
+        await moveServoToFace(facePosition, canvasSize, servoConfig);
+      } else {
+        throw new Error('Servo configuration not initialized');
+      }
     } catch (error) {
       console.error('Failed to move servo to face:', error);
       logger.log(`Failed to move servo to face: ${error}`, 'ERROR', ModelName);
@@ -135,7 +150,7 @@ export const InteractionInterface: React.FC = () => {
         <SystemStatusCard
           networkStatus={networkStatus}
           deviceStatus={deviceStatus}
-          deviceId={deviceId}
+          deviceId={deviceName}
           ipAddress={ipAddress}
         />
 
