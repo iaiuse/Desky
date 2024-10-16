@@ -20,7 +20,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     deviceName: '',
     phoneIpAddress: '',
     systemPrompt: '',
-    serialPort: ''
+    serialPort: '',
+    phonePort: '',
+    tts_baseUrl: '',
+    tts_apiKey: '',
+    tts_modelName: '',
   });
 
   const { ports, loading, error } = useSerialPorts();
@@ -72,6 +76,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
         <TabsList>
           <TabsTrigger value="api">API设置</TabsTrigger>
           <TabsTrigger value="device">设备设置</TabsTrigger>
+          <TabsTrigger value="tts">TTS设置</TabsTrigger>
         </TabsList>
         <TabsContent value="api">
           <Card>
@@ -149,6 +154,44 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
                   <Input
                     value={settings.phoneIpAddress}
                     onChange={(e) => handleChange('phoneIpAddress', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">手机端口</label>
+                  <Input
+                    value={settings.phonePort}
+                    onChange={(e) => handleChange('phonePort', e.target.value)}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="tts">
+          <Card>
+            <CardHeader>TTS设置</CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <label className="block mb-1">TTS Base URL</label>
+                  <Input
+                    value={settings.tts_baseUrl}
+                    onChange={(e) => handleChange('tts_baseUrl', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">TTS API Key</label>
+                  <Input
+                    type="password"
+                    value={settings.tts_apiKey}
+                    onChange={(e) => handleChange('tts_apiKey', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">TTS 模型名称</label>
+                  <Input
+                    value={settings.tts_modelName}
+                    onChange={(e) => handleChange('tts_modelName', e.target.value)}
                   />
                 </div>
               </div>

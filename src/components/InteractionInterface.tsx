@@ -3,21 +3,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
-import { invoke } from '@tauri-apps/api/tauri';
 import { DebugPanel } from './DebugPanel';
 import VideoFeed from './VideoFeed';
-import { generateResponse, generateSpeech } from '../lib/openai';
+import { generateResponse } from '../lib/openai';
+import { generateSpeech } from '@/lib/tts';
 import { setServoPosition, initializeServo, moveServoToFace, ServoConfig, checkDeviceStatus } from '../lib/servoControl';
 import { db } from '../lib/db';
 import { logger } from '../utils/logger';
 import { SystemStatusCard } from './SystemStatusCard';
+import { checkMobilePhoneStatus, initializeConnection, mobilePhoneConfig } from '../lib/phoneCommunication';
+import AudioPlayer from './AudioPlayer';
 
 const ModelName = "InteractionInterface";
 
 export const InteractionInterface: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [response, setResponse] = useState('');
-  const [networkStatus, setNetworkStatus] = useState('Checking...');
+  const [mobilePhoneStatus, setMobilePhoneStatus] = useState('Checking...');
   const [deviceStatus, setDeviceStatus] = useState('Checking...');
   const [servoX, setServoX] = useState(90);
   const [servoY, setServoY] = useState(90);
@@ -28,65 +30,101 @@ export const InteractionInterface: React.FC = () => {
     ipAddress: 'Default IP'
   });
 
+  const [mobilePhoneConfig, setMobilePhoneConfig] = useState<mobilePhoneConfig>({
+    ipAddress: 'Default IP',
+    port: 12345
+  });
+  const [audioBuffer, setAudioBuffer] = useState<ArrayBuffer | null>(null);
+
   useEffect(() => {
     const initializeComponent = async () => {
       try {
         const deviceNameSetting = await db.settings.get('deviceName');
         const phoneIpSetting = await db.settings.get('phoneIpAddress');
+        const phonePortSetting = await db.settings.get('phonePort');
 
         logger.log(`deviceNameSetting: ${JSON.stringify(deviceNameSetting)}`, 'INFO', ModelName);
         logger.log(`phoneIpSetting: ${JSON.stringify(phoneIpSetting)}`, 'INFO', ModelName);
+        logger.log(`phonePortSetting: ${JSON.stringify(phonePortSetting)}`, 'INFO', ModelName);
 
         const deviceName = deviceNameSetting?.value || 'Not set';
         const ipAddress = phoneIpSetting?.value || 'Not set';
+        let port: number;
+        if (phonePortSetting?.value) {
+          const parsedPort = parseInt(phonePortSetting.value, 10);
+          if (isNaN(parsedPort) || parsedPort < 0 || parsedPort > 65535) {
+            logger.log(`Invalid port number in settings: ${phonePortSetting.value}. Using default.`, 'WARN', ModelName);
+            port = 12345;
+          } else {
+            port = parsedPort;
+          }
+        } else {
+          port = 12345;
+        }
+
+        logger.log(`Port: ${port}`, 'INFO', ModelName);
 
         setDeviceName(deviceName);
         setIpAddress(ipAddress);
 
         logger.log(`Device Name: ${deviceName}`, 'INFO', ModelName);
         logger.log(`IP Address: ${ipAddress}`, 'INFO', ModelName);
+        logger.log(`Port: ${port}`, 'INFO', ModelName);
 
-        const config: ServoConfig = {
+        const servoConfig: ServoConfig = {
           deviceName: deviceName,
           ipAddress: ipAddress
         };
-        setServoConfig(config);
+        setServoConfig(servoConfig);
 
-        const deviceCheck = await checkDeviceStatus(config);
+        const phoneConfig: mobilePhoneConfig = {
+          ipAddress: ipAddress,
+          port: port
+        };
+        setMobilePhoneConfig(phoneConfig);
+
+        const deviceCheck = await checkDeviceStatus(servoConfig);
         setDeviceStatus(deviceCheck ? 'Online' : 'Offline');
-        logger.log(`Device Status: ${deviceStatus}`, 'INFO', ModelName);
+        logger.log(`Servo Device Status: ${deviceStatus}`, 'INFO', ModelName);
 
         if (deviceCheck) {
-          await initializeServo(config);
+          await initializeServo(servoConfig);
           logger.log(`initializeServo success`, 'INFO', ModelName);
         }
 
-        //const networkCheck = await invoke('check_network_status');
-        //setNetworkStatus(networkCheck ? 'Connected' : 'Disconnected');
+        const phoneCheck = await checkMobilePhoneStatus(phoneConfig);
+        setMobilePhoneStatus(phoneCheck ? 'Online' : 'Offline');
+        logger.log(`Phone Status: ${mobilePhoneConfig}`, 'INFO', ModelName);
 
-        logger.log(`Network Status: ${networkStatus}`, 'INFO', ModelName);
-        
+        if (phoneCheck) {
+          await initializeConnection(phoneConfig);
+          logger.log(`initializeConnection success`, 'INFO', ModelName);
+        }
+
       } catch (error) {
         console.error('Error initializing component:', error);
         logger.log(`Error initializing component: ${error}`, 'ERROR', ModelName);
-        setNetworkStatus('Error');
         setDeviceStatus('Error');
+        setMobilePhoneStatus('Error');
       }
     };
 
     initializeComponent();
   }, []);
 
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setResponse('Processing...');
+    setAudioBuffer(null);  // Reset audio buffer
     try {
       const result = await generateResponse(prompt);
       setResponse(result.response);
-
-      await generateSpeech(result.response);
-      // TODO: Implement speech playback
-
+  
+      const newAudioBuffer = await generateSpeech(result.response);
+      setAudioBuffer(newAudioBuffer);
+  
       if (result.servoX !== undefined && result.servoY !== undefined && servoConfig) {
         await setServoPosition({ x: result.servoX, y: result.servoY }, servoConfig);
         setServoX(result.servoX);
@@ -95,7 +133,7 @@ export const InteractionInterface: React.FC = () => {
     } catch (error) {
       console.error('Error processing request:', error);
       logger.log(`Error processing request: ${error}`, 'ERROR', ModelName);
-      setResponse('An error occurred while processing your request.');
+      setResponse(`An error occurred while processing your request.${error}`);
     }
   };
 
@@ -150,12 +188,13 @@ export const InteractionInterface: React.FC = () => {
               <p>{response}</p>
             </div>
           )}
+          {audioBuffer && <AudioPlayer audioBuffer={audioBuffer} />}
         </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <SystemStatusCard
-          networkStatus={networkStatus}
+          networkStatus={mobilePhoneStatus}
           deviceStatus={deviceStatus}
           deviceId={deviceName}
           ipAddress={ipAddress}
@@ -194,10 +233,10 @@ export const InteractionInterface: React.FC = () => {
 
       <VideoFeed onFaceDetected={handleFaceDetected} />
 
-      <DebugPanel 
-        onServoControl={handleServoControl} 
+      <DebugPanel
+        onServoControl={handleServoControl}
         servoConfig={servoConfig}
-        />
+      />
     </div>
   );
 };
