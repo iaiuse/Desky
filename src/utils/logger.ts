@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api';
 
 type LogLevel = 'INFO' | 'WARN' | 'ERROR';
 

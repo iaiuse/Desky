@@ -1,54 +1,85 @@
-use firmata::Board;
-use std::io;
+use serialport::SerialPort;
+use std::time::Duration;
+use std::io::{Write, Read};
 use crate::commands::log_message;
 
 pub struct ServoController {
-    board: Board,
+    port: Box<dyn SerialPort>,
 }
 
 impl ServoController {
-    pub fn new(port_name: &str) -> io::Result<Self> {
+    pub fn new(port_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
         log_message(
-            format!("尝试为端口 {} 创建新的 ServoController", port_name),
+            format!("Attempting to create new ServoController for port {}", port_name),
             "INFO".to_string(),
             "servo_controller".to_string(),
         );
 
-        // 由于 `Board::new` 在 firmata 0.2.0 中不返回 Result，我们直接调用它
-        // 注意，这个方法在失败时可能会 panic，但由于您不关心功能，这里忽略错误处理
-        let board = Board::new(port_name);
+        let port = serialport::new(port_name, 9600)
+            .timeout(Duration::from_millis(1000))
+            .open()?;
 
         log_message(
-            format!("成功为端口 {} 创建 Board", port_name),
+            format!("Successfully opened serial port {}", port_name),
             "INFO".to_string(),
             "servo_controller".to_string(),
         );
 
-        Ok(ServoController { board })
+        Ok(ServoController { port })
     }
 
-    pub fn set_position(&mut self, pin: u8, angle: u8) -> io::Result<()> {
+    pub fn set_position(&mut self, x: Option<u8>, y: Option<u8>) -> Result<(), Box<dyn std::error::Error>> {
+        let x_value = x.unwrap_or(90);
+        let y_value = y.unwrap_or(90);
+        
         log_message(
-            format!("设置引脚 {} 的位置为角度 {}", pin, angle),
-            "INFO".to_string(),
-            "servo_controller".to_string(),
-        );
-        // 将角度（0-180）转换为 PWM 值（0-255）
-        let pwm_value = (angle as f32 / 180.0 * 255.0) as i32;
-        log_message(
-            format!("将角度 {} 转换为 PWM 值 {}", angle, pwm_value),
+            format!("Setting servo position: X={}, Y={}", x_value, y_value),
             "INFO".to_string(),
             "servo_controller".to_string(),
         );
 
-        // 由于您不需要实际功能，我们可以注释掉这行代码，或者假设它不会引起错误
-        self.board.analog_write(pin as i32, pwm_value);
+        let command = format!("{},{}\n", x_value, y_value);
+        self.port.write_all(command.as_bytes())?;
+        self.port.flush()?;
 
         log_message(
-            format!("成功将引脚 {} 设置为角度 {}", pin, angle),
+            format!("Successfully sent command: {}", command.trim()),
             "INFO".to_string(),
             "servo_controller".to_string(),
         );
+
+        // 等待一段时间，让 Arduino 有时间处理命令
+        std::thread::sleep(Duration::from_millis(100));
+
+        // 读取 Arduino 的响应
+        let mut response = String::new();
+        let mut serial_buf: Vec<u8> = vec![0; 1000];
+        match self.port.read(serial_buf.as_mut_slice()) {
+            Ok(t) => {
+                response.push_str(&String::from_utf8_lossy(&serial_buf[..t]));
+                log_message(
+                    format!("Received response from Arduino: {}", response.trim()),
+                    "INFO".to_string(),
+                    "servo_controller".to_string(),
+                );
+            },
+            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                log_message(
+                    "No response from Arduino (timeout)".to_string(),
+                    "WARN".to_string(),
+                    "servo_controller".to_string(),
+                );
+            },
+            Err(e) => {
+                log_message(
+                    format!("Error reading from serial port: {}", e),
+                    "ERROR".to_string(),
+                    "servo_controller".to_string(),
+                );
+                return Err(Box::new(e));
+            }
+        }
+
         Ok(())
     }
 }
