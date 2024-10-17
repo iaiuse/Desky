@@ -24,13 +24,3 @@ serialport = "4.2.0"
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
 
-
-[package.metadata.pkg-config]
-opencv4 = "4.0"
-
-[package.metadata.vcpkg]
-git = "https://github.com/microsoft/vcpkg"
-rev = "a42af01"
-
-[package.metadata.vcpkg.target]
-x86_64-apple-darwin = { triplet = "x64-osx" }

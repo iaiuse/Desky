@@ -16,8 +16,7 @@ impl DeviceManager {
     }
 
     pub fn set_servo_position(&self, device_name: String, x: Option<f64>, y: Option<f64>) -> Result<(), String> {
-        log_message(format!("Setting servo position for device: {}", device_name), "INFO".to_string(), "set_servo_position".to_string());
-        
+        log_message(format!("Setting servo position for device: {}, X: {:?}, Y: {:?}", device_name, x, y), "INFO".to_string(), "set_servo_position".to_string());
         let mut servo_controllers = self.servo_controllers.lock().map_err(|e| {
             let error_msg = format!("Failed to lock servo controllers: {}", e);
             log_message(error_msg.clone(), "ERROR".to_string(), "set_servo_position".to_string());
@@ -40,16 +39,25 @@ impl DeviceManager {
             error_msg
         })?;
         
-        let x = x.map(|v| v as u8);
-        let y = y.map(|v| v as u8);
+        if let Some(x) = x {
+            let x_angle = x as u8;
+            log_message(format!("Setting X servo to angle: {}", x_angle), "INFO".to_string(), "set_servo_position".to_string());
+            servo_controller.set_position(9, x_angle).map_err(|e| {
+                let error_msg = format!("Failed to set X servo position: {}", e);
+                log_message(error_msg.clone(), "ERROR".to_string(), "set_servo_position".to_string());
+                error_msg
+            })?;
+        }
 
-        log_message(format!("Attempting to set servo position: x={:?}, y={:?}", x, y), "INFO".to_string(), "set_servo_position".to_string());
-
-        servo_controller.set_position(x, y).map_err(|e| {
-            let error_msg = format!("Failed to set servo position: {}", e);
-            log_message(error_msg.clone(), "ERROR".to_string(), "set_servo_position".to_string());
-            error_msg
-        })?;
+        if let Some(y) = y {
+            let y_angle = y as u8;
+            log_message(format!("Setting Y servo to angle: {}", y_angle), "INFO".to_string(), "set_servo_position".to_string());
+            servo_controller.set_position(10, y_angle).map_err(|e| {
+                let error_msg = format!("Failed to set Y servo position: {}", e);
+                log_message(error_msg.clone(), "ERROR".to_string(), "set_servo_position".to_string());
+                error_msg
+            })?;
+        }
 
         log_message(format!("Successfully set servo position for device: {}", device_name), "INFO".to_string(), "set_servo_position".to_string());
         Ok(())
@@ -57,7 +65,6 @@ impl DeviceManager {
 
     pub fn check_device_status(&self, device_name: String) -> Result<bool, String> {
         log_message(format!("Checking device status for: {}", device_name), "INFO".to_string(), "check_device_status".to_string());
-        
         let mut servo_controllers = self.servo_controllers.lock().map_err(|e| {
             let error_msg = format!("Failed to lock servo controllers: {}", e);
             log_message(error_msg.clone(), "ERROR".to_string(), "check_device_status".to_string());
@@ -81,13 +88,14 @@ impl DeviceManager {
         })?;
         
         log_message("Attempting to set test position to check device status".to_string(), "INFO".to_string(), "check_device_status".to_string());
-        match servo_controller.set_position(Some(80), None) {
+        match servo_controller.set_position(9, 90) {
             Ok(_) => {
                 log_message(format!("Device {} is online and responsive", device_name), "INFO".to_string(), "check_device_status".to_string());
                 Ok(true)
             },
             Err(e) => {
-                log_message(format!("Device {} is not responsive: {}", device_name, e), "WARN".to_string(), "check_device_status".to_string());
+                let error_msg = format!("Device {} is not responsive: {}", device_name, e);
+                log_message(error_msg.clone(), "WARN".to_string(), "check_device_status".to_string());
                 Ok(false)
             },
         }

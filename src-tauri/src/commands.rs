@@ -1,5 +1,4 @@
 use serde::{Serialize, Deserialize};
-use log::{info, error, warn};
 use serialport::available_ports;
 use crate::socket_communication::SocketCommunication;
 use crate::device_manager::DeviceManager;
