@@ -34,6 +34,7 @@
     "react-datepicker": "^7.5.0",
     "react-day-picker": "9.1.4",
     "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.4.1",
     "react-router-dom": "^6.27.0",
     "react-webcam": "^7.2.0",
     "serialport": "^12.0.0",

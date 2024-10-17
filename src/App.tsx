@@ -6,21 +6,28 @@ import { InteractionPage } from './pages/InteractionPage';
 import { HelpPage } from './pages/Help';
 import { LogPage } from './pages/Log';
 import { RobotProvider } from './context/RobotContext';
+import { db } from './lib/db';
+import { Spinner } from './components/ui/spinner';
+import { Toaster } from './components/ui/toaster';
+import { useToast } from './hooks/useToast';
 
 const App: React.FC = () => {
   const [isConfigured, setIsConfigured] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     const checkConfiguration = async () => {
       try {
-        // Implement actual configuration check logic here
-        const response = await fetch('/api/config');
-        const config = await response.json();
-        setIsConfigured(config.isComplete);
+        const settings = await db.settings.toArray();
+        const requiredSettings = ['apiUrl', 'apiKey', 'modelName', 'deviceName', 'phoneIpAddress', 'serialPort'];
+        const isConfigured = requiredSettings.every(key => 
+          settings.some(setting => setting.key === key && setting.value)
+        );
+        setIsConfigured(isConfigured);
       } catch (error) {
         console.error('Failed to check configuration:', error);
-        // Handle error appropriately
+        setIsConfigured(false);
       } finally {
         setIsLoading(false);
       }
@@ -28,9 +35,26 @@ const App: React.FC = () => {
     checkConfiguration();
   }, []);
 
+  useEffect(() => {
+    if (!isConfigured && !isLoading) {
+      toast({
+        message: "请在设置页面完成设置。",
+        type: "warning",
+        options: { duration: 5000 }
+      });
+    }
+  }, [isConfigured, isLoading, toast]);
+
   if (isLoading) {
-    return <div>Loading...</div>; // Or a more sophisticated loading component
+    return <div className="flex justify-center items-center h-screen"><Spinner /></div>;
   }
+
+  const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+    if (!isConfigured) {
+      return <Navigate to="/settings" replace />;
+    }
+    return <>{children}</>;
+  };
 
   return (
     <RobotProvider>
@@ -39,7 +63,11 @@ const App: React.FC = () => {
           <Routes>
             <Route 
               path="/" 
-              element={isConfigured ? <InteractionPage /> : <Navigate to="/settings" />} 
+              element={
+                <ProtectedRoute>
+                  <InteractionPage />
+                </ProtectedRoute>
+              } 
             />
             <Route 
               path="/settings" 
@@ -48,6 +76,7 @@ const App: React.FC = () => {
             <Route path="/help" element={<HelpPage />} />
             <Route path="/log" element={<LogPage />} />
           </Routes>
+          <Toaster />
         </MainLayout>
       </Router>
     </RobotProvider>
