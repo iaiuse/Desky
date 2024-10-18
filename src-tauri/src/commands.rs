@@ -1,20 +1,59 @@
-use serde::{Serialize, Deserialize};
-use serialport::available_ports;
+use serde::Serialize;
 use crate::socket_communication::SocketCommunication;
 use crate::device_manager::DeviceManager;
-use std::sync::Arc;
-
+use serialport::available_ports;
+use crate::camera_controller::CameraController;
+use std::sync::{Arc, Mutex};
+use nokhwa::utils::CameraIndex;
 
 pub struct AppState {
     pub socket_communication: Arc<SocketCommunication>,
     pub device_manager: Arc<DeviceManager>,
+    pub camera_controller: Arc<Mutex<CameraController>>, // 使用 Mutex 以实现可变性
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct ServoPosition {
-    pub x: Option<f64>,
-    pub y: Option<f64>,
+#[derive(Serialize)]
+pub struct CameraInfoDto {
+    pub index: u32,
+    pub name: String,
+    pub description: Option<String>,
 }
+
+#[tauri::command]
+pub fn toggle_camera(active: bool, state: tauri::State<AppState>) {
+    let camera_controller = state.camera_controller.lock().unwrap();
+    camera_controller.toggle_camera(active);
+}
+
+#[tauri::command]
+pub fn get_face_position(state: tauri::State<AppState>) -> Option<(f64, f64)> {
+    let camera_controller = state.camera_controller.lock().unwrap();
+    camera_controller.get_face_position()
+}
+
+#[tauri::command]
+pub fn get_available_cameras() -> Vec<CameraInfoDto> {
+    CameraController::get_available_cameras()
+        .into_iter()
+        .map(|info| CameraInfoDto {
+            index: match info.index() {
+                CameraIndex::Index(i) => *i,
+                CameraIndex::String(_) => 0,
+            },
+            name: info.human_name().to_string(),
+            description: Some(info.description().to_string()),
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn select_camera(index: u32, state: tauri::State<AppState>) {
+    let mut camera_controller = state.camera_controller.lock().unwrap();
+    camera_controller.select_camera(index as usize);
+}
+
+// 其他方法保持不变...
+
 
 #[tauri::command]
 pub fn set_servo_position(
@@ -53,7 +92,6 @@ pub fn initialize_mobile_phone_connection(ip_address: String, port: u16, state: 
 pub fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
-
 
 #[tauri::command]
 pub fn log_message(message: String, level: String, module: String) {

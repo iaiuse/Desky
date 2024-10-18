@@ -8,22 +8,27 @@ mod socket_communication;
 mod device_manager;
 mod servo_controller;
 mod logger;
+mod camera_controller;
 
 use crate::logger::setup_logging;
 use crate::socket_communication::SocketCommunication;
 use crate::device_manager::DeviceManager;
+use crate::camera_controller::CameraController;
+use crate::commands::AppState;
 use tauri::Manager;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 创建 SocketCommunication 和 DeviceManager 实例
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let socket_communication = Arc::new(SocketCommunication::new());
     let device_manager = Arc::new(DeviceManager::new());
+    let camera_controller = Arc::new(Mutex::new(CameraController::new())); // 包装在 Mutex 中
 
     tauri::Builder::default()
-        .manage(commands::AppState {
-            socket_communication: Arc::clone(&socket_communication),
-            device_manager: Arc::clone(&device_manager),
+        .manage(AppState {
+            socket_communication: socket_communication.clone(),
+            device_manager: device_manager.clone(),
+            camera_controller: camera_controller.clone(), // 传递 Arc<Mutex<CameraController>>
         })
         .setup(|app| {
             setup_logging().expect("Failed to setup logging");
@@ -45,6 +50,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_logs,
             commands::clear_logs,
             commands::get_serial_ports,
+            commands::toggle_camera,
+            commands::get_face_position,
+            commands::get_available_cameras,
+            commands::select_camera,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
