@@ -19,10 +19,23 @@ pub struct CameraInfoDto {
     pub description: Option<String>,
 }
 
+// In commands.rs
 #[tauri::command]
-pub fn toggle_camera(active: bool, state: tauri::State<AppState>) {
-    let camera_controller = state.camera_controller.lock().unwrap();
-    camera_controller.toggle_camera(active);
+pub async fn toggle_camera(active: bool, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let camera_controller = state.camera_controller.clone();
+    tokio::spawn(async move {
+        if let Ok(mut controller) = camera_controller.lock() {
+            match controller.toggle_camera(active).await {
+                Ok(_) => {
+                    // Camera toggled successfully
+                }
+                Err(e) => {
+                    eprintln!("Error toggling camera: {:?}", e);
+                }
+            }
+        }
+    });
+    Ok(())
 }
 
 #[tauri::command]

@@ -22,21 +22,43 @@ use std::sync::{Arc, Mutex};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let socket_communication = Arc::new(SocketCommunication::new());
     let device_manager = Arc::new(DeviceManager::new());
-    let camera_controller = Arc::new(Mutex::new(CameraController::new())); // 包装在 Mutex 中
+    let camera_controller = Arc::new(Mutex::new(CameraController::new()?)); // Handle the Result here
 
     tauri::Builder::default()
         .manage(AppState {
             socket_communication: socket_communication.clone(),
             device_manager: device_manager.clone(),
-            camera_controller: camera_controller.clone(), // 传递 Arc<Mutex<CameraController>>
+            camera_controller: camera_controller.clone(),
         })
-        .setup(|app| {
+        // In main.rs
+        .setup(move |app| {
             setup_logging().expect("Failed to setup logging");
             #[cfg(debug_assertions)]
             {
                 let window = app.get_window("main").unwrap();
                 window.open_devtools();
             }
+
+            // Start the camera in a separate tokio task
+            let camera_controller = camera_controller.clone();
+            tokio::spawn(async move {
+                loop {
+                    if let Ok(mut controller) = camera_controller.lock() {
+                        match controller.toggle_camera(true).await {
+                            Ok(_) => {
+                                // Camera toggled successfully
+                                break;  // Exit the loop if successful
+                            }
+                            Err(e) => {
+                                eprintln!("Error toggling camera: {:?}", e);
+                                // Maybe add a delay before retrying
+                                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            }
+                        }
+                    }
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
