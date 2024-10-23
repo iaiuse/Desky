@@ -21,6 +21,7 @@ tokio = { version = "1.12", features = ["macros", "rt-multi-thread"] }
 serialport = "4.2.0"
 nokhwa = { version = "0.10.5", features = ["input-avfoundation"] }
 rustface = "0.1"
+parking_lot = "0.12"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

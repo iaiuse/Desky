@@ -9,6 +9,7 @@ dependencies = [
  "chrono",
  "log",
  "nokhwa",
+ "parking_lot",
  "pkg-config",
  "rustface",
  "serde",
