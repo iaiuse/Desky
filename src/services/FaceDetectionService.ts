@@ -1,188 +1,98 @@
-// src/services/FaceDetectionService.ts
-
 import { logger } from '../utils/logger';
 import {
   FaceDetectionOptions,
   FaceDetectionResult,
-  FacePosition,
-  FaceDetectionError,
-  VideoSize,
-  FaceSize
+  FacePosition
 } from '../types/faceDetection';
 
 const ModelName = 'FaceDetection';
 
-// OpenCV 全局实例追踪
-let isOpenCVInitialized = false;
-let pendingInitialization: Promise<void> | null = null;
-
 export class FaceDetectionService {
-  private cv: any;
+  private cv: any = null;
   private video: HTMLVideoElement | null = null;
   private stream: MediaStream | null = null;
-  private faceDetector: any;
-  private initialized = false;
+  private faceDetector: any = null;
   private processCanvas: HTMLCanvasElement;
   private processCtx: CanvasRenderingContext2D;
   private frameCount = 0;
   private positionHistory: FacePosition[] = [];
-  private processingTimeHistory: number[] = [];
+  private initialized = false;
+  private initializing = false;
+  private lastProcessingTime = 0;
+  private fpsCounter = 0;
+  private lastFpsUpdate = 0;
+  private currentFps = 0;
 
-  private readonly defaultOptions: Required<FaceDetectionOptions> = {
-    // 检测参数
+  private readonly options: Required<FaceDetectionOptions> = {
     scaleFactor: 1.1,
     minNeighbors: 5,
     minSize: 30,
     maxSize: 0,
     minConfidence: 0.7,
-
-    // 性能参数
-    pyramidScale: 0.5,
-    useImagePyramid: true,
     skipFrames: 2,
-
-    // 防抖参数
     shakeFilterSize: 30,
     smoothingFactor: 0.3,
-    maxHistorySize: 30,
-
-    // 美颜参数
-    beautyLevel: 0.5,
-    brightnessAdjust: 1.1
+    pyramidScale: 0,
+    useImagePyramid: false,
+    maxHistorySize: 0,
+    beautyLevel: 0,
+    brightnessAdjust: 0
   };
 
-  private options: Required<FaceDetectionOptions>;
-
   constructor(options: Partial<FaceDetectionOptions> = {}) {
-    this.options = { ...this.defaultOptions, ...options };
-
-    // 创建处理用canvas
+    this.options = { ...this.options, ...options };
     this.processCanvas = document.createElement('canvas');
     const ctx = this.processCanvas.getContext('2d');
-    if (!ctx) {
-      throw new FaceDetectionError('Failed to get canvas context', 'CANVAS_ERROR');
-    }
+    if (!ctx) throw new Error('Failed to get canvas context');
     this.processCtx = ctx;
-
+    
     logger.log('FaceDetectionService instance created', 'INFO', ModelName);
   }
 
-  // 修改 initialize 方法以接受 MediaStream
-  async initialize(stream?: MediaStream): Promise<void> {
+  async initialize(stream: MediaStream): Promise<void> {
     if (this.initialized) return;
+    if (this.initializing) {
+      logger.log('Already initializing, waiting...', 'INFO', ModelName);
+      return;
+    }
 
     try {
-      // 加载 OpenCV
-      if (!isOpenCVInitialized) {
-        if (!pendingInitialization) {
-          pendingInitialization = this.loadOpenCV();
-        }
-        await pendingInitialization;
-        isOpenCVInitialized = true;
-      }
+      this.initializing = true;
+      logger.log('Starting initialization...', 'INFO', ModelName);
 
-      // 初始化人脸检测器
-      if (!this.faceDetector) {
-        this.faceDetector = new this.cv.CascadeClassifier();
-        await this.loadFaceDetector();
-      }
+      // 1. 加载OpenCV
+      logger.log('Loading OpenCV...', 'INFO', ModelName);
+      await this.loadOpenCV();
+      logger.log('OpenCV loaded successfully', 'INFO', ModelName);
+      logger.log(`OpenCV Version: ${(window as any).cv.getBuildInformation()}`, 'INFO', ModelName);
 
-      // 如果提供了流，直接使用它初始化视频
-      if (stream) {
-        await this.initializeVideoStream(stream);
-      }
+      // 2. 初始化人脸检测器
+      logger.log('Initializing face detector...', 'INFO', ModelName);
+      this.faceDetector = new this.cv.CascadeClassifier();
+      await this.loadFaceDetector();
+      logger.log('Face detector initialized successfully', 'INFO', ModelName);
+
+      // 3. 设置视频流
+      logger.log('Setting up video stream...', 'INFO', ModelName);
+      await this.initializeVideoStream(stream);
+      logger.log('Video stream initialized successfully', 'INFO', ModelName);
 
       this.initialized = true;
-      logger.log('FaceDetectionService initialized successfully', 'INFO', ModelName);
+      this.logSystemInfo();
     } catch (error) {
-      const message = `Initialization failed: ${error instanceof Error ? error.message : String(error)}`;
-      logger.log(message, 'ERROR', ModelName);
-      throw new FaceDetectionError(message, 'INIT_ERROR');
+      logger.log(`Initialization failed: ${error}`, 'ERROR', ModelName);
+      throw error;
+    } finally {
+      this.initializing = false;
     }
   }
-
-  // 新增方法：处理视频流初始化
-  private async initializeVideoStream(stream: MediaStream): Promise<void> {
-    try {
-      // 停止现有的流（如果有）
-      if (this.stream) {
-        this.stream.getTracks().forEach(track => track.stop());
-      }
-
-      this.stream = stream;
-      this.video = document.createElement('video');
-      this.video.srcObject = stream;
-      this.video.setAttribute('playsinline', 'true');
-
-      await new Promise<void>((resolve, reject) => {
-        if (!this.video) return reject(new Error('Video element not created'));
-
-        this.video.onloadedmetadata = () => {
-          this.video?.play()
-            .then(() => {
-              if (this.video) {
-                this.processCanvas.width = this.video.videoWidth;
-                this.processCanvas.height = this.video.videoHeight;
-              }
-              resolve();
-            })
-            .catch(reject);
-        };
-
-        this.video.onerror = (event) => {
-          reject(new Error(`Video error: ${event}`));
-        };
-      });
-
-      logger.log('Video stream initialized successfully', 'INFO', ModelName);
-    } catch (error) {
-      throw new FaceDetectionError(`Failed to initialize video stream: ${error}`, 'STREAM_ERROR');
-    }
-  }
-
-  // 现有的方法保持不变，但startCamera方法需要修改
-  async startCamera(deviceId?: string): Promise<void> {
-    if (!this.initialized) {
-      throw new FaceDetectionError('Service not initialized', 'NOT_INITIALIZED');
-    }
-
-    try {
-      const constraints = {
-        video: deviceId ? { deviceId: { exact: deviceId } } : true
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      await this.initializeVideoStream(stream);
-      
-      logger.log('Camera started successfully', 'INFO', ModelName);
-    } catch (error) {
-      throw new FaceDetectionError(`Failed to start camera: ${error}`, 'CAMERA_ERROR');
-    }
-  }
-
-  
-  
 
   private async loadOpenCV(): Promise<void> {
     return new Promise((resolve, reject) => {
-      // 检查是否已经加载
       if ((window as any).cv?.getBuildInformation) {
         this.cv = (window as any).cv;
+        logger.log('OpenCV already loaded', 'INFO', ModelName);
         resolve();
-        return;
-      }
-
-      // 防止重复加载脚本
-      const existingScript = document.querySelector('script[src="/opencv.js"]');
-      if (existingScript) {
-        logger.log('OpenCV script already exists, waiting for load', 'INFO', ModelName);
-        const checkInterval = setInterval(() => {
-          if ((window as any).cv?.getBuildInformation) {
-            clearInterval(checkInterval);
-            this.cv = (window as any).cv;
-            resolve();
-          }
-        }, 100);
         return;
       }
 
@@ -191,35 +101,24 @@ export class FaceDetectionService {
       script.setAttribute('type', 'text/javascript');
       script.setAttribute('src', '/opencv.js');
 
-      const handleLoad = async () => {
-        try {
-          if ((window as any).cv?.getBuildInformation) {
+      script.onload = () => {
+        logger.log('OpenCV script loaded, waiting for initialization...', 'INFO', ModelName);
+        if ((window as any).cv?.getBuildInformation) {
+          this.cv = (window as any).cv;
+          resolve();
+        } else {
+          (window as any).cv.onRuntimeInitialized = () => {
             this.cv = (window as any).cv;
             resolve();
-          } else if ((window as any).cv instanceof Promise) {
-            this.cv = await (window as any).cv;
-            resolve();
-          } else {
-            (window as any).cv.onRuntimeInitialized = () => {
-              this.cv = (window as any).cv;
-              resolve();
-            };
-          }
-        } catch (error) {
-          reject(new FaceDetectionError(
-            `Failed to load OpenCV WASM: ${error}`,
-            'OPENCV_LOAD_ERROR'
-          ));
+          };
         }
       };
 
-      script.addEventListener('load', handleLoad);
-      script.addEventListener('error', () => {
-        reject(new FaceDetectionError(
-          'Failed to load OpenCV script',
-          'OPENCV_LOAD_ERROR'
-        ));
-      });
+      script.onerror = () => {
+        const error = 'Failed to load OpenCV script';
+        logger.log(error, 'ERROR', ModelName);
+        reject(new Error(error));
+      };
 
       document.body.appendChild(script);
     });
@@ -227,88 +126,60 @@ export class FaceDetectionService {
 
   private async loadFaceDetector(): Promise<void> {
     try {
+      logger.log('Fetching face detector classifier...', 'INFO', ModelName);
       const response = await fetch('/haarcascade_frontalface_default.xml');
-      const xmlText = await response.text();
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-      const blob = new Blob([xmlText], { type: 'text/xml' });
+      const xmlContent = await response.text();
+      logger.log('Classifier file loaded, size: ' + xmlContent.length + ' bytes', 'INFO', ModelName);
+
+      const blob = new Blob([xmlContent], { type: 'text/xml' });
       const url = URL.createObjectURL(blob);
 
       const result = this.faceDetector.load(url);
       URL.revokeObjectURL(url);
 
       if (!result) {
-        throw new FaceDetectionError(
-          'Failed to load face detector classifier',
-          'CLASSIFIER_LOAD_ERROR'
-        );
+        throw new Error('Failed to initialize classifier');
       }
 
-      logger.log('Face detector loaded successfully', 'INFO', ModelName);
+      logger.log('Face detector classifier loaded successfully', 'INFO', ModelName);
     } catch (error) {
-      throw new FaceDetectionError(
-        `Failed to load face detector: ${error}`,
-        'CLASSIFIER_LOAD_ERROR'
-      );
+      logger.log(`Failed to load face detector: ${error}`, 'ERROR', ModelName);
+      throw error;
     }
-  }
-
-  
-
-  stopCamera(): void {
-    if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop());
-      this.stream = null;
-    }
-    if (this.video) {
-      this.video.srcObject = null;
-      this.video = null;
-    }
-    this.positionHistory = [];
-    this.frameCount = 0;
-    logger.log('Camera stopped', 'INFO', ModelName);
   }
 
   async detectFace(): Promise<FaceDetectionResult | null> {
-    if (!this.initialized || !this.video) return null;
+    if (!this.initialized || !this.video || !this.cv) return null;
 
     try {
-      if (this.frameCount++ % this.options.skipFrames !== 0) return null;
-
       const startTime = performance.now();
+      
+      if (this.frameCount++ % this.options.skipFrames !== 0) return null;
+      if (this.video.readyState !== this.video.HAVE_ENOUGH_DATA) return null;
+
+      // 更新FPS计数
+      this.updateFps();
+
+      // 将视频帧绘制到canvas
       this.processCtx.drawImage(this.video, 0, 0);
 
+      // 转换为OpenCV格式
       const imageData = this.processCtx.getImageData(
         0, 0,
         this.processCanvas.width,
         this.processCanvas.height
       );
-
-      const result = await this.processImage(imageData, startTime);
-
-      if (result) {
-        this.updateProcessingStats(startTime);
-      }
-
-      return result;
-    } catch (error) {
-      logger.log(`Error in face detection: ${error}`, 'ERROR', ModelName);
-      return null;
-    }
-  }
-
-  private async processImage(imageData: ImageData, startTime: number): Promise<FaceDetectionResult | null> {
-    const src = this.cv.matFromImageData(imageData);
-    let processingSrc = src;
-
-    try {
-      // 图像预处理
-      processingSrc = await this.preprocessImage(processingSrc);
+      const mat = this.cv.matFromImageData(imageData);
+      const gray = new this.cv.Mat();
+      this.cv.cvtColor(mat, gray, this.cv.COLOR_RGBA2GRAY);
 
       // 人脸检测
       const faces = new this.cv.RectVector();
-      const gray = new this.cv.Mat();
-      this.cv.cvtColor(processingSrc, gray, this.cv.COLOR_RGBA2GRAY);
-
       this.faceDetector.detectMultiScale(
         gray,
         faces,
@@ -316,156 +187,265 @@ export class FaceDetectionService {
         this.options.minNeighbors,
         0,
         new this.cv.Size(this.options.minSize, this.options.minSize),
-        this.options.maxSize ? new this.cv.Size(this.options.maxSize, this.options.maxSize) : new this.cv.Size()
+        new this.cv.Size()
       );
+
+      // 清理资源
+      mat.delete();
+      gray.delete();
 
       if (faces.size() > 0) {
         const face = faces.get(0);
-        const result = this.processFaceDetection(face, performance.now() - startTime);
+        const position = {
+          x: face.x + face.width / 2,
+          y: face.y + face.height / 2
+        };
+
+        // 绘制检测结果
+        this.drawDetectionResult(face, startTime);
+
+        const result = {
+          position: this.smoothPosition(position),
+          size: {
+            width: face.width,
+            height: face.height
+          },
+          confidence: this.calculateConfidence(face),
+          processingTime: performance.now() - startTime
+        };
+
+        faces.delete();
         return result;
       }
 
+      faces.delete();
       return null;
-    } finally {
-      // 清理资源
-      src.delete();
-      if (processingSrc !== src) {
-        processingSrc.delete();
-      }
+    } catch (error) {
+      logger.log(`Error in face detection: ${error}`, 'ERROR', ModelName);
+      return null;
     }
   }
 
-  private async preprocessImage(src: any): Promise<any> {
-    let result = src;
+  private drawDetectionResult(face: any, startTime: number): void {
+    // 绘制人脸框
+    this.processCtx.strokeStyle = '#00ff00';
+    this.processCtx.lineWidth = 2;
+    this.processCtx.strokeRect(face.x, face.y, face.width, face.height);
 
-    // 图像金字塔处理
-    if (this.options.useImagePyramid) {
-      const scaled = new this.cv.Mat();
-      const size = new this.cv.Size(
-        src.cols * this.options.pyramidScale,
-        src.rows * this.options.pyramidScale
-      );
-      this.cv.pyrDown(src, scaled, size);
-      result = scaled;
-    }
-
-    // 美颜处理
-    if (this.options.beautyLevel > 0) {
-      const beauty = new this.cv.Mat();
-      this.cv.bilateralFilter(result, beauty, 9, 75, 75);
-      if (result !== src) {
-        result.delete();
-      }
-      result = beauty;
-    }
-
-    return result;
-  }
-
-  private processFaceDetection(face: any, processingTime: number): FaceDetectionResult {
-    const scale = this.options.useImagePyramid ? 1 / this.options.pyramidScale : 1;
-
-    const position = {
-      x: (face.x + face.width / 2) * scale,
-      y: (face.y + face.height / 2) * scale
-    };
-
-    const size: FaceSize = {
-      width: face.width * scale,
-      height: face.height * scale
-    };
-
-    return {
-      position: this.smoothPosition(position),
-      size,
-      confidence: this.calculateConfidence(face),
-      processingTime,
-      angle: this.calculateAngle(position)
-    };
-  }
-
-  private smoothPosition(position: FacePosition): FacePosition {
-    this.positionHistory.push(position);
-
-    if (this.positionHistory.length > this.options.maxHistorySize) {
-      this.positionHistory.shift();
-    }
-
-    const weights = this.positionHistory.map((_, index, arr) =>
-      Math.pow(this.options.smoothingFactor, arr.length - index - 1)
-    );
-    const weightSum = weights.reduce((a, b) => a + b, 0);
-
-    return {
-      x: this.positionHistory.reduce((acc, pos, i) => acc + pos.x * weights[i], 0) / weightSum,
-      y: this.positionHistory.reduce((acc, pos, i) => acc + pos.y * weights[i], 0) / weightSum
-    };
-  }
-
-  private calculateConfidence(face: any): number {
-    const aspectRatio = face.width / face.height;
-    const aspectRatioScore = 1 - Math.min(Math.abs(aspectRatio - 1.0), 1);
-
+    // 绘制中心点
+    this.processCtx.fillStyle = '#ff0000';
     const centerX = face.x + face.width / 2;
     const centerY = face.y + face.height / 2;
-    const positionScore = Math.min(
-      1,
-      Math.min(centerX, this.processCanvas.width - centerX) / (this.processCanvas.width / 4) *
-      Math.min(centerY, this.processCanvas.height - centerY) / (this.processCanvas.height / 4)
-    );
+    this.processCtx.beginPath();
+    this.processCtx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
+    this.processCtx.fill();
 
-    return Math.max(0, Math.min(1, aspectRatioScore * 0.3 + positionScore * 0.7));
-  }
-
-  private calculateAngle(position: FacePosition): number | undefined {
-    if (this.positionHistory.length < 2) return undefined;
-
-    const prevPosition = this.positionHistory[this.positionHistory.length - 2];
-    const deltaX = position.x - prevPosition.x;
-    const deltaY = position.y - prevPosition.y;
-
-    return Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-  }
-
-  private updateProcessingStats(startTime: number): void {
+    // 绘制调试信息
+    this.processCtx.fillStyle = '#00ff00';
+    this.processCtx.font = '12px Arial';
     const processingTime = performance.now() - startTime;
-    this.processingTimeHistory.push(processingTime);
+    this.processCtx.fillText(`Detection Time: ${processingTime.toFixed(1)}ms`, 10, 20);
+    this.processCtx.fillText(`FPS: ${this.currentFps}`, 10, 40);
+  }
 
-    if (this.processingTimeHistory.length > 30) {
-      this.processingTimeHistory.shift();
+  private updateFps(): void {
+    this.fpsCounter++;
+    const now = performance.now();
+    if (now - this.lastFpsUpdate >= 1000) {
+      this.currentFps = Math.round((this.fpsCounter * 1000) / (now - this.lastFpsUpdate));
+      this.fpsCounter = 0;
+      this.lastFpsUpdate = now;
     }
   }
 
-  getVideoSize(): VideoSize | null {
-    if (!this.video) return null;
-    return {
-      width: this.video.videoWidth,
-      height: this.video.videoHeight
-    };
-  }
-
-  isInitialized(): boolean {
-    return this.initialized;
-  }
-
-  // 添加获取当前视频元素的方法
-  getVideoElement(): HTMLVideoElement | null {
-    return this.video;
-  }
-
-  // 添加视频流就绪状态检查
-  isStreamReady(): boolean {
-    return !!(this.initialized && this.video && this.video.readyState === 4);
-  }
-
-  dispose(): void {
-    this.stopCamera();
-    if (this.faceDetector) {
-      this.faceDetector.delete();
+  private logSystemInfo(): void {
+    const info = {
+      initialized: this.initialized,
+      videoResolution: this.video ? {
+        width: this.video.videoWidth,
+        height: this.video.videoHeight
+      } : null,
+      canvasResolution: {
+        width: this.processCanvas.width,
+        height: this.processCanvas.height},
+        options: this.options,
+        performance: {
+          lastProcessingTime: this.lastProcessingTime,
+          currentFps: this.currentFps,
+        }
+      };
+      
+      logger.log('System Info:', 'INFO', ModelName);
+      logger.log(JSON.stringify(info, null, 2), 'INFO', ModelName);
     }
-    this.initialized = false;
-    this.positionHistory = [];
-    this.processingTimeHistory = [];
-    logger.log('FaceDetectionService disposed', 'INFO', ModelName);
+  
+    private calculateConfidence(face: any): number {
+      // 计算人脸检测的置信度
+      const aspectRatio = face.width / face.height;
+      const idealAspectRatio = 1.0; // 理想的人脸宽高比
+      const aspectRatioScore = 1 - Math.min(Math.abs(aspectRatio - idealAspectRatio), 1);
+  
+      // 检查人脸是否在合理的位置范围内
+      const centerX = face.x + face.width / 2;
+      const centerY = face.y + face.height / 2;
+      const positionScore = Math.min(
+        1,
+        Math.min(centerX, this.processCanvas.width - centerX) / (this.processCanvas.width / 4) *
+        Math.min(centerY, this.processCanvas.height - centerY) / (this.processCanvas.height / 4)
+      );
+  
+      // 根据人脸大小计算分数
+      const minFaceSize = Math.min(this.processCanvas.width, this.processCanvas.height) * 0.1;
+      const maxFaceSize = Math.min(this.processCanvas.width, this.processCanvas.height) * 0.8;
+      const sizeScore = Math.min(
+        1,
+        (face.width - minFaceSize) / (maxFaceSize - minFaceSize)
+      );
+  
+      // 综合评分
+      const confidence = (
+        aspectRatioScore * 0.3 +
+        positionScore * 0.4 +
+        sizeScore * 0.3
+      );
+  
+      return Math.max(0, Math.min(1, confidence));
+    }
+  
+    private smoothPosition(position: FacePosition): FacePosition {
+      this.positionHistory.push(position);
+  
+      if (this.positionHistory.length > this.options.shakeFilterSize) {
+        this.positionHistory.shift();
+      }
+  
+      // 使用指数加权移动平均进行平滑处理
+      const weights = this.positionHistory.map((_, index, arr) => 
+        Math.pow(this.options.smoothingFactor, arr.length - index - 1)
+      );
+      const weightSum = weights.reduce((a, b) => a + b, 0);
+  
+      const smoothedPosition = {
+        x: this.positionHistory.reduce((acc, pos, i) => acc + pos.x * weights[i], 0) / weightSum,
+        y: this.positionHistory.reduce((acc, pos, i) => acc + pos.y * weights[i], 0) / weightSum
+      };
+  
+      // 记录调试信息
+      if (this.positionHistory.length > 1) {
+        const lastPos = this.positionHistory[this.positionHistory.length - 2];
+        const movement = Math.sqrt(
+          Math.pow(position.x - lastPos.x, 2) + 
+          Math.pow(position.y - lastPos.y, 2)
+        );
+        if (movement > 50) { // 如果移动距离较大，记录日志
+          logger.log(`Large movement detected: ${movement.toFixed(2)}px`, 'INFO', ModelName);
+        }
+      }
+  
+      return smoothedPosition;
+    }
+  
+    getDebugInfo(): any {
+      return {
+        initialized: this.initialized,
+        hasOpenCV: !!this.cv,
+        hasFaceDetector: !!this.faceDetector,
+        videoState: this.video ? {
+          readyState: this.video.readyState,
+          videoWidth: this.video.videoWidth,
+          videoHeight: this.video.videoHeight,
+        } : null,
+        performance: {
+          fps: this.currentFps,
+          processingTime: this.lastProcessingTime,
+          frameCount: this.frameCount,
+          historySize: this.positionHistory.length,
+        },
+        options: this.options,
+      };
+    }
+  
+    async checkOpenCVAvailability(): Promise<boolean> {
+      try {
+        if (!this.cv) {
+          await this.loadOpenCV();
+        }
+        return true;
+      } catch (error) {
+        logger.log(`OpenCV availability check failed: ${error}`, 'ERROR', ModelName);
+        return false;
+      }
+    }
+  
+    private async initializeVideoStream(stream: MediaStream): Promise<void> {
+      if (this.stream) {
+        this.stream.getTracks().forEach(track => track.stop());
+      }
+  
+      this.stream = stream;
+      this.video = document.createElement('video');
+      this.video.srcObject = stream;
+      this.video.setAttribute('playsinline', 'true');
+  
+      await new Promise<void>((resolve, reject) => {
+        if (!this.video) return reject(new Error('Video element not created'));
+  
+        const timeoutId = setTimeout(() => {
+          reject(new Error('Video loading timeout'));
+        }, 10000);
+  
+        this.video.onloadedmetadata = () => {
+          clearTimeout(timeoutId);
+          this.video?.play()
+            .then(() => {
+              if (this.video) {
+                this.processCanvas.width = this.video.videoWidth;
+                this.processCanvas.height = this.video.videoHeight;
+                logger.log(`Video dimensions set to ${this.video.videoWidth}x${this.video.videoHeight}`, 'INFO', ModelName);
+              }
+              resolve();
+            })
+            .catch(reject);
+        };
+  
+        this.video.onerror = (event) => {
+          clearTimeout(timeoutId);
+          reject(new Error(`Video error: ${event}`));
+        };
+      });
+    }
+  
+    stopCamera(): void {
+      if (this.stream) {
+        this.stream.getTracks().forEach(track => track.stop());
+        this.stream = null;
+      }
+      if (this.video) {
+        this.video.srcObject = null;
+        this.video = null;
+      }
+      this.positionHistory = [];
+      this.frameCount = 0;
+      this.initialized = false;
+      this.initializing = false;
+      this.lastProcessingTime = 0;
+      this.currentFps = 0;
+      logger.log('Camera stopped', 'INFO', ModelName);
+    }
+  
+    isInitialized(): boolean {
+      return this.initialized;
+    }
+  
+    dispose(): void {
+      this.stopCamera();
+      if (this.faceDetector) {
+        this.faceDetector.delete();
+        this.faceDetector = null;
+      }
+      if (this.cv) {
+        this.cv = null;
+      }
+      logger.log('Service disposed', 'INFO', ModelName);
+    }
   }
-}

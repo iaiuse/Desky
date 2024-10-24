@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CameraOff, Camera, RefreshCw } from "lucide-react";
+import { invoke } from '@tauri-apps/api/tauri';
 import PermissionHandler from './PermissionHandler';
 import { logger } from '../utils/logger';
 import { permissionManager } from '../utils/permissionUtils';
@@ -18,7 +19,6 @@ import {
   getCameraIcon,
   getErrorMessage,
   getPlaceholderText,
-  drawDetectionResult,
   getVideoStreamInfo
 } from '../utils/videoUtils';
 
@@ -52,6 +52,9 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
   const faceDetectionServiceRef = useRef<FaceDetectionService | null>(null);
   const animationFrameRef = useRef<number>();
   const currentStreamRef = useRef<MediaStream | null>(null);
+  // 提前声明 processVideoFrame
+  // 添加舵机控制相关的引用
+  const lastServoPositionRef = useRef({ x: 90, y: 90 });
 
   // 初始化时检查权限状态
   useEffect(() => {
@@ -60,7 +63,7 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
         logger.log('Checking initial camera permission', 'INFO', ModelName);
         const result = await permissionManager.checkPermission();
         setPermissionStatus(result.state === 'granted' ? 'granted' : 'prompt');
-        
+
         if (result.state === 'granted') {
           // 如果已经有权限，直接获取摄像头列表
           await fetchCameras();
@@ -91,7 +94,7 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
         }));
 
       setCameras(videoDevices);
-      
+
       if (videoDevices.length > 0 && !selectedCamera) {
         // 优先选择内置摄像头
         const defaultCamera = videoDevices.find(c => c.type === 'builtin') || videoDevices[0];
@@ -116,55 +119,26 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
     await fetchCameras();
   }, [fetchCameras]);
 
-  // 提前声明 processVideoFrame
-  const processVideoFrame = useCallback(async () => {
-    if (!canvasRef.current || !videoRef.current || !faceDetectionServiceRef.current) return;
-
-    try {
-      const ctx = canvasRef.current.getContext('2d');
-      if (!ctx) return;
-
-      // 确保视频正在播放
-      if (videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-        // 清除画布
-        ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
-        
-        // 绘制视频帧
-        ctx.drawImage(videoRef.current, 0, 0, canvasSize.width, canvasSize.height);
-
-        // 检测人脸
-        const result = await faceDetectionServiceRef.current.detectFace();
-
-        if (result) {
-          // 绘制检测结果
-          drawDetectionResult(ctx, result, debug);
-          // 调用回调
-          onFaceDetected(result, canvasSize);
-        }
-      }
-    } catch (error) {
-      logger.log(`Error processing video frame: ${error}`, 'ERROR', ModelName);
-    }
-
-    animationFrameRef.current = requestAnimationFrame(processVideoFrame);
-  }, [canvasSize, onFaceDetected, debug]);
 
 
- 
 
-  // 初始化摄像头
+  // 修改initializeCamera函数
   const initializeCamera = useCallback(async (deviceId: string) => {
     if (!videoRef.current) {
       throw new Error('Video element not initialized');
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({
+    const constraints = {
       video: {
-        deviceId: { exact: deviceId },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        deviceId: deviceId ? { exact: deviceId } : undefined,
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        frameRate: { ideal: 30 },
+        facingMode: "user"
       }
-    });
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
     // 设置视频源
     videoRef.current.srcObject = stream;
@@ -173,17 +147,22 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
     // 等待视频加载
     await new Promise<void>((resolve, reject) => {
       if (!videoRef.current) return reject(new Error('Video element not found'));
-      
+
       const handleCanPlay = () => {
         if (videoRef.current) {
-          // 更新视频和画布尺寸
+          // 更新canvas尺寸以匹配视频尺寸
           const videoWidth = videoRef.current.videoWidth;
           const videoHeight = videoRef.current.videoHeight;
-          
+
           setCanvasSize({
             width: videoWidth,
             height: videoHeight
           });
+
+          if (canvasRef.current) {
+            canvasRef.current.width = videoWidth;
+            canvasRef.current.height = videoHeight;
+          }
 
           videoRef.current.play()
             .then(() => {
@@ -200,8 +179,83 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
 
     return stream;
   }, []);
+  // 修改后的 processVideoFrame 函数
+  const processVideoFrame = useCallback(async () => {
+    if (!canvasRef.current || !videoRef.current || !faceDetectionServiceRef.current) return;
 
-  // 切换摄像头状态
+    try {
+      const ctx = canvasRef.current.getContext('2d');
+      if (!ctx) return;
+
+      if (videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+        // 将视频帧绘制到 canvas
+        ctx.drawImage(
+          videoRef.current,
+          0, 0,
+          canvasSize.width,
+          canvasSize.height
+        );
+
+        // 进行人脸检测
+        const result = await faceDetectionServiceRef.current.detectFace();
+
+        if (result) {
+          // 调用回调函数
+          onFaceDetected(result, canvasSize);
+
+          // 计算并更新舵机位置
+          const newServoX = Math.round(180 - (result.position.x / canvasSize.width) * 180);
+          const newServoY = Math.round((result.position.y / canvasSize.height) * 180);
+
+          // 平滑处理
+          const smoothedX = lastServoPositionRef.current.x +
+            (newServoX - lastServoPositionRef.current.x) * 0.3;
+          const smoothedY = lastServoPositionRef.current.y +
+            (newServoY - lastServoPositionRef.current.y) * 0.3;
+
+          // 限制范围
+          const clampedX = Math.max(0, Math.min(180, Math.round(smoothedX)));
+          const clampedY = Math.max(0, Math.min(180, Math.round(smoothedY)));
+
+          // 检查是否需要更新舵机位置
+          const threshold = 2;
+          if (
+            Math.abs(clampedX - lastServoPositionRef.current.x) > threshold ||
+            Math.abs(clampedY - lastServoPositionRef.current.y) > threshold
+          ) {
+            try {
+              await invoke('set_servo_position', {
+                x: clampedX,
+                y: clampedY
+              });
+              lastServoPositionRef.current = { x: clampedX, y: clampedY };
+            } catch (error) {
+              logger.log(`Error setting servo position: ${error}`, 'ERROR', ModelName);
+            }
+          }
+        }
+
+        // 添加调试信息
+        if (debug) {
+          const debugInfo = faceDetectionServiceRef.current.getDebugInfo();
+          if (debugInfo.performance) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(10, canvasSize.height - 70, 200, 60);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '12px Arial';
+            ctx.fillText(`FPS: ${debugInfo.performance.fps}`, 20, canvasSize.height - 50);
+            ctx.fillText(`Servo: (${lastServoPositionRef.current.x}°, ${lastServoPositionRef.current.y}°)`, 20, canvasSize.height - 30);
+          }
+        }
+      }
+    } catch (error) {
+      logger.log(`Error processing video frame: ${error}`, 'ERROR', ModelName);
+    }
+
+    animationFrameRef.current = requestAnimationFrame(processVideoFrame);
+  }, [canvasSize, onFaceDetected, debug]);
+
+  // 修改 toggleCamera 函数
   const toggleCamera = useCallback(async (active: boolean) => {
     try {
       setIsLoading(true);
@@ -218,9 +272,14 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
         // 初始化人脸检测服务
         if (!faceDetectionServiceRef.current) {
           faceDetectionServiceRef.current = new FaceDetectionService({
-            shakeFilterSize: 30,
+            scaleFactor: 1.1,
+            minNeighbors: 5,
+            minSize: 30,
+            maxSize: 0,
             minConfidence: 0.7,
             skipFrames: 2,
+            shakeFilterSize: 30,
+            smoothingFactor: 0.3,
             useImagePyramid: true,
             pyramidScale: 0.5
           });
@@ -228,7 +287,11 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
 
         await faceDetectionServiceRef.current.initialize(stream);
         setIsCameraActive(true);
-        
+
+        // 重置舵机位置到中心
+        await invoke('set_servo_position', { x: 90, y: 90 });
+        lastServoPositionRef.current = { x: 90, y: 90 };
+
         // 开始处理视频帧
         requestAnimationFrame(processVideoFrame);
       } else {
@@ -248,6 +311,12 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
           videoRef.current.srcObject = null;
         }
 
+        // 清理人脸检测服务
+        if (faceDetectionServiceRef.current) {
+          faceDetectionServiceRef.current.dispose();
+          faceDetectionServiceRef.current = null;
+        }
+
         setIsCameraActive(false);
         setStreamInfo('');
       }
@@ -260,21 +329,25 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
     }
   }, [selectedCamera, initializeCamera, processVideoFrame]);
 
-  
+
+
+
+
+
 
   // 选择摄像头
   const handleCameraSelect = useCallback(async (deviceId: string) => {
     if (deviceId === selectedCamera) return;
-    
+
     try {
       // 如果摄像头正在运行，先停止
       if (isCameraActive) {
         await toggleCamera(false);
       }
-      
+
       setSelectedCamera(deviceId);
       logger.log(`Selected camera: ${deviceId}`, 'INFO', ModelName);
-      
+
       // 如果之前摄像头是开启的，选择新摄像头后自动开启
       if (isCameraActive) {
         await toggleCamera(true);
@@ -302,130 +375,129 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
       if (navigator.mediaDevices?.removeEventListener) {
         navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
       }
-      
+
       // 清理资源
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      
+
       if (currentStreamRef.current) {
         currentStreamRef.current.getTracks().forEach(track => track.stop());
       }
-      
+
       if (faceDetectionServiceRef.current) {
         faceDetectionServiceRef.current.dispose();
       }
     };
   }, [fetchCameras]);
 
- // 根据权限状态渲染不同内容
- if (permissionStatus === 'checking') {
-  return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="text-center">
-          <Camera className="mx-auto mb-2 animate-pulse" size={48} />
-          <p>正在检查摄像头权限...</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+  // 根据权限状态渲染不同内容
+  if (permissionStatus === 'checking') {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center">
+            <Camera className="mx-auto mb-2 animate-pulse" size={48} />
+            <p>正在检查摄像头权限...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
-if (permissionStatus !== 'granted') {
-  return (
-    <Card>
-      <CardContent className="p-6">
-        <PermissionHandler onPermissionGranted={handlePermissionGranted} />
-      </CardContent>
-    </Card>
-  );
-}
+  if (permissionStatus !== 'granted') {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <PermissionHandler onPermissionGranted={handlePermissionGranted} />
+        </CardContent>
+      </Card>
+    );
+  }
 
-// 渲染主界面 (摄像头已获得权限)
-return (
-  <Card className="w-full">
-    <CardContent className="p-6">
-      {/* 摄像头控制栏 */}
-      <div className="mb-4 flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center space-x-4">
-          {/* 摄像头选择下拉框 */}
-          <div className="w-64">
-            <Select
-              value={selectedCamera || ''}
-              onValueChange={handleCameraSelect}
-              disabled={isLoading || isCameraActive}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={getPlaceholderText(isLoading, cameras.length)} />
-              </SelectTrigger>
-              <SelectContent>
-                {cameras.map((camera) => (
-                  <SelectItem key={camera.deviceId} value={camera.deviceId}>
-                    <div className="flex items-center gap-2">
-                      {getCameraIcon(camera.type)}
-                      <div className="flex flex-col">
-                        <span className="font-medium">{getCameraTypeLabel(camera.type)}</span>
-                        <span className="text-xs text-gray-500">{camera.label}</span>
+  // 渲染主界面 (摄像头已获得权限)
+  return (
+    <Card className="w-full">
+      <CardContent className="p-6">
+        {/* 摄像头控制栏 */}
+        <div className="mb-4 flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center space-x-4">
+            {/* 摄像头选择下拉框 */}
+            <div className="w-64">
+              <Select
+                value={selectedCamera || ''}
+                onValueChange={handleCameraSelect}
+                disabled={isLoading || isCameraActive}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={getPlaceholderText(isLoading, cameras.length)} />
+                </SelectTrigger>
+                <SelectContent>
+                  {cameras.map((camera) => (
+                    <SelectItem key={camera.deviceId} value={camera.deviceId}>
+                      <div className="flex items-center gap-2">
+                        {getCameraIcon(camera.type)}
+                        <div className="flex flex-col">
+                          <span className="font-medium">{getCameraTypeLabel(camera.type)}</span>
+                          <span className="text-xs text-gray-500">{camera.label}</span>
+                        </div>
                       </div>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 摄像头开关 */}
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={isCameraActive}
+                onCheckedChange={toggleCamera}
+                disabled={!selectedCamera || isLoading}
+              />
+              <span className="text-sm font-medium">
+                {isCameraActive ? '关闭摄像头' : '开启摄像头'}
+              </span>
+            </div>
           </div>
 
-          {/* 摄像头开关 */}
-          <div className="flex items-center space-x-2">
-            <Switch
-              checked={isCameraActive}
-              onCheckedChange={toggleCamera}
-              disabled={!selectedCamera || isLoading}
-            />
-            <span className="text-sm font-medium">
-              {isCameraActive ? '关闭摄像头' : '开启摄像头'}
-            </span>
-          </div>
+          {/* 刷新按钮 */}
+          <Button
+            onClick={fetchCameras}
+            disabled={isLoading || isCameraActive}
+            size="sm"
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            刷新列表
+          </Button>
         </div>
 
-        {/* 刷新按钮 */}
-        <Button
-          onClick={fetchCameras}
-          disabled={isLoading || isCameraActive}
-          size="sm"
-          variant="outline"
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          刷新列表
-        </Button>
-      </div>
-
-        {/* 视频显示区域 */}
+        {/* 修改后的视频显示区域 */}
         <div className="relative rounded-lg overflow-hidden bg-gray-900"
-          style={{ 
+          style={{
             width: '100%',
             paddingBottom: `${(canvasSize.height / canvasSize.width) * 100}%`
           }}>
-          {/* 视频元素 */}
+          {/* 隐藏的video元素 */}
           <video
             ref={videoRef}
             playsInline
             muted
             autoPlay
-            className="absolute top-0 left-0 w-full h-full object-cover"
-            style={{ display: 'block' }}
+            style={{ display: 'none' }}
           />
-          
+
           {/* 渲染画布 */}
           <canvas
             ref={canvasRef}
             width={canvasSize.width}
             height={canvasSize.height}
-            className="absolute top-0 left-0 w-full h-full"
+            className="absolute top-0 left-0 w-full h-full object-contain"
           />
 
-          {/* 状态覆盖层 */}
+          {/* 状态覆盖层保持不变 */}
           {!isCameraActive && (
             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
               <div className="text-center text-white">
@@ -445,10 +517,14 @@ return (
           )}
         </div>
 
-        {/* 调试信息 */}
-        {debug && streamInfo && (
-          <div className="mt-2 text-sm text-gray-500">
-            {streamInfo}
+        {/* 调试信息区域 */}
+        {debug && (
+          <div className="mt-2 space-y-1 text-sm text-gray-500">
+            {streamInfo && <div>{streamInfo}</div>}
+            <div>Canvas Size: {canvasSize.width}x{canvasSize.height}</div>
+            {videoRef.current && (
+              <div>Video Size: {videoRef.current.videoWidth}x{videoRef.current.videoHeight}</div>
+            )}
           </div>
         )}
 
