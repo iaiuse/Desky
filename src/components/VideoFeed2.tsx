@@ -11,7 +11,6 @@ import { permissionManager } from '../utils/permissionUtils';
 import {
   detectCameraType,
   getCameraTypeLabel,
-  getCameraIcon,
   getErrorMessage,
   getPlaceholderText,
   getVideoStreamInfo,
