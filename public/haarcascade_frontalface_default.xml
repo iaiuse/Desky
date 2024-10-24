@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<opencv_storage>
+<cascade>
+  <stageType>BOOST</stageType>
+  <featureType>HAAR</featureType>
+  <height>24</height>
+  <width>24</width>
+  <stageParams>
+    <boostType>GAB</boostType>
+    <minHitRate>9.9500000476837158e-01</minHitRate>
+    <maxFalseAlarm>5.0000000000000000e-01</maxFalseAlarm>
+    <weightTrimRate>9.4999999999999996e-01</weightTrimRate>
+    <maxDepth>1</maxDepth>
+    <maxWeakCount>100</maxWeakCount></stageParams>
+  <featureParams>
+    <maxCatCount>0</maxCatCount>
+    <featSize>1</featSize>
+    <mode>BASIC</mode></featureParams>
+  <stageNum>25</stageNum>
+  <stages>
+    <!-- stage 0 -->
+    <_>
+      <maxWeakCount>9</maxWeakCount>
+      <stageThreshold>-5.0445430278778076e+00</stageThreshold>
+      <weakClassifiers>
+        <_>
+          <internalNodes>
+            0 -1 0 -3.1511999666690826e-02</internalNodes>
+          <leafValues>
+            2.0875380039215088e+00 -2.2172100543975830e+00</leafValues></_>
+        <_>
+          <internalNodes>
+            0 -1 1 1.2396000325679779e-02</internalNodes>
+          <leafValues>
+            -1.8633940219879150e+00 1.3272049427032471e+00</leafValues></_>
+        <!-- ... 更多分类器数据 ... -->
+      </weakClassifiers></_>
+    <!-- stage 1 -->
+    <_>
+      <maxWeakCount>16</maxWeakCount>
+      <stageThreshold>-4.9842839241027832e+00</stageThreshold>
+      <weakClassifiers>
+        <_>
+          <internalNodes>
+            0 -1 24 4.6526998281478882e-02</internalNodes>
+          <leafValues>
+            -1.5501760244369507e+00 1.6835799217224121e+00</leafValues></_>
+        <!-- ... 更多分类器数据 ... -->
+      </weakClassifiers></_>
+    <!-- ... 更多阶段数据 ... -->
+  </stages>
+  <features>
+    <!-- 特征数据 -->
+    <_>
+      <rects>
+        <_>
+          0 8 20 12 -1.</_>
+        <_>
+          0 14 20 6 2.</_></rects>
+      <tilted>0</tilted></_>
+    <_>
+      <rects>
+        <_>
+          0 4 20 12 -1.</_>
+        <_>
+          0 10 20 6 2.</_></rects>
+      <tilted>0</tilted></_>
+    <!-- ... 更多特征数据 ... -->
+  </features>
+</cascade>
+</opencv_storage>

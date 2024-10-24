@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "Desky",
-    "version": "0.8.0"  
+    "version": "0.8.0"
   },
   "tauri": {
     "allowlist": {
@@ -16,6 +16,13 @@
       "shell": {
         "all": false,
         "open": true
+      },
+      "fs": {
+        "all": false,
+        "readFile": true,
+        "writeFile": true,
+        "readDir": true,
+        "scope": ["$APP/*"]
       }
     },
     "windows": [
@@ -26,11 +33,22 @@
         "title": "desky",
         "width": 1200,
         "minHeight": 600,
-        "minWidth": 800
+        "minWidth": 800,
+        "transparent": true,
+        "decorations": true,
+        "center": true,
+        "alwaysOnTop": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": ["'self'"],
+        "img-src": ["'self'", "data:", "blob:"],
+        "media-src": ["'self'", "data:", "blob:"],
+        "connect-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-eval'"],
+        "style-src": ["'self'", "'unsafe-inline'"]
+      }
     },
     "bundle": {
       "active": true,
@@ -42,7 +60,16 @@
         "icons/128x128@2x.png",
         "icons/icon.icns",
         "icons/icon.ico"
-      ]
+      ],
+      "macOS": {
+        "entitlements": "entitlements.plist",
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null,
+        "license": "../LICENSE",
+        "minimumSystemVersion": "10.13"
+      }
     }
   }
 }

@@ -1,5 +1,5 @@
 use nokhwa::{Camera, utils::{CameraInfo, ApiBackend}};
-use std::sync::{Arc};
+use std::sync::Arc;
 use crate::commands::log_message;
 use parking_lot::Mutex as PLMutex;
 

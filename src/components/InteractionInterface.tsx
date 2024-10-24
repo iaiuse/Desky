@@ -7,7 +7,8 @@ import { DebugPanel } from './DebugPanel';
 import VideoFeed from './VideoFeed';
 import { generateResponse } from '../lib/openai';
 import { generateSpeech } from '@/lib/tts';
-import { setServoPosition, initializeServo, moveServoToFace, ServoConfig, checkDeviceStatus } from '../lib/servoControl';
+import { setServoPosition, initializeServo,  ServoConfig, checkDeviceStatus } from '../lib/servoControl';
+import { FaceDetectionResult } from '../types/faceDetection';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { db } from '../lib/db';
@@ -184,16 +185,23 @@ export const InteractionInterface: React.FC = () => {
     }
   };
 
-  const handleFaceDetected = async (facePosition: { x: number, y: number }, canvasSize: { width: number, height: number }) => {
-    try {
-      if (servoConfig) {
-        await moveServoToFace(facePosition, canvasSize, servoConfig);
-      } else {
-        throw new Error('Servo configuration not initialized');
-      }
-    } catch (error) {
-      console.error('Failed to move servo to face:', error);
-      logger.log(`Failed to move servo to face: ${error}`, 'ERROR', ModelName);
+  
+
+  const handleFaceDetected = (
+    result: FaceDetectionResult,
+    canvasSize: { width: number, height: number }
+  ) => {
+    // 计算舵机角度
+    const servoX = Math.round((result.position.x / canvasSize.width) * 180);
+    const servoY = Math.round((result.position.y / canvasSize.height) * 180);
+    
+    // 仅在置信度足够高时才移动舵机
+    if (result.confidence > 0.7 && servoConfig) {
+      // 调用你的舵机控制函数
+      setServoPosition({
+        x: servoX,
+        y: servoY
+      }, servoConfig);
     }
   };
 
