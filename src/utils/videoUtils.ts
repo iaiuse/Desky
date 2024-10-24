@@ -29,6 +29,18 @@ export function getCameraTypeLabel(type: string): string {
   return labels[type as keyof typeof labels];
 }
 
+export function getCameraIconStyle(type: string): string {
+  const iconColors = {
+    builtin: 'text-blue-500',
+    external: 'text-green-500',
+    virtual: 'text-purple-500',
+    unknown: 'text-gray-500'
+  };
+  
+  return `h-4 w-4 ${iconColors[type as keyof typeof iconColors]}`;
+}
+
+
 export function getCameraIcon(type: string): string {
   const icons = {
     builtin: '💻',
