@@ -5,9 +5,6 @@ use std::sync::{Arc};
 use serde::Serialize;
 use crate::socket_communication::SocketCommunication;
 use crate::device_manager::DeviceManager;
-use crate::camera_controller::CameraController;
-use parking_lot::Mutex;
-use nokhwa::utils::CameraIndex;
 
 #[derive(Serialize)]
 pub struct CameraInfoDto {
@@ -20,27 +17,11 @@ pub struct CameraInfoDto {
 pub struct AppState {
     pub socket_communication: Arc<SocketCommunication>,
     pub device_manager: Arc<DeviceManager>,
-    pub camera_controller: Arc<Mutex<CameraController>>,
 }
 
 // 实现 Send 和 Sync
 unsafe impl Send for AppState {}
 unsafe impl Sync for AppState {}
-
-#[tauri::command]
-pub fn get_available_cameras() -> Vec<CameraInfoDto> {
-    CameraController::get_available_cameras()
-        .into_iter()
-        .map(|info| CameraInfoDto {
-            index: match info.index() {
-                CameraIndex::Index(i) => *i,
-                _ => 0,
-            },
-            name: info.human_name().to_string(),
-            description: Some(info.description().to_string()),
-        })
-        .collect()
-}
 
 #[tauri::command]
 pub async fn set_servo_position(
