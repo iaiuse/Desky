@@ -16,6 +16,7 @@ export interface FaceDetectionResult {
   confidence: number;
   processingTime?: number;
   angle?: number;
+  fps?: number;
 }
 
 export interface FaceDetectionOptions {

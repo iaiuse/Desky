@@ -282,7 +282,12 @@ export const InteractionInterface: React.FC = () => {
         </Card>
       </div>
 
-      <VideoFeed onFaceDetected={handleFaceDetected} />
+      <VideoFeed 
+        onFaceDetected={handleFaceDetected}
+        debug={true}
+        currentServoX={servoX}  // 使用已有的 servoX 状态
+        currentServoY={servoY}  // 使用已有的 servoY 状态
+      />
 
       <DebugPanel
         onServoControl={handleServoControl}

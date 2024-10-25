@@ -13,9 +13,11 @@ const ModelName = "VideoFeed";
 interface VideoFeedProps {
   onFaceDetected: (result: FaceDetectionResult, canvasSize: { width: number, height: number }) => void;
   debug?: boolean;
+  currentServoX?: number;
+  currentServoY?: number;
 }
 
-const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) => {
+const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false, currentServoX = 90, currentServoY = 90 }) => {
   const [currentResult, setCurrentResult] = useState<FaceDetectionResult | null>(null);
 
   const handleFaceDetected = useCallback((result: FaceDetectionResult, size: { width: number, height: number }) => {
@@ -78,15 +80,17 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
           onRefresh={fetchCameras}
         />
 
-        <VideoDisplay
-          videoRef={videoRef}
-          canvasRef={canvasRef}
-          isActive={isCameraActive}
-          isLoading={isLoading}
-          hasCameras={cameras.length > 0}
-          currentResult={currentResult}
-          debug={debug}
-        />
+<VideoDisplay
+  videoRef={videoRef}
+  canvasRef={canvasRef}
+  isActive={isCameraActive}
+  isLoading={isLoading}
+  hasCameras={cameras.length > 0}
+  currentResult={currentResult}
+  currentServoX={currentServoX} // 从props传入
+  currentServoY={currentServoY} // 从props传入
+  debug={debug}
+/>
 
         {debug && streamInfo && (
           <div className="mt-2 text-sm text-gray-500">

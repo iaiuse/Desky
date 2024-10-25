@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { CameraOff, Camera } from "lucide-react";
-import { drawDetectionResult } from '@/utils/videoUtils';
 import type { FaceDetectionResult } from '@/types/faceDetection';
 
 interface VideoDisplayProps {
@@ -11,6 +10,9 @@ interface VideoDisplayProps {
   hasCameras: boolean;
   currentResult?: FaceDetectionResult | null;
   debug?: boolean;
+  // 添加舵机位置的状态
+  currentServoX?: number;
+  currentServoY?: number;
 }
 
 const VideoDisplay: React.FC<VideoDisplayProps> = ({
@@ -20,9 +22,19 @@ const VideoDisplay: React.FC<VideoDisplayProps> = ({
   isLoading,
   hasCameras,
   currentResult,
+  currentServoX = 90,
+  currentServoY = 90,
   debug = false
 }) => {
   const drawRef = useRef<number>();
+  const lastDrawnPosition = useRef<{x: number, y: number} | null>(null);
+
+  const calculateScreenCoordinates = (servoX: number, servoY: number, canvas: HTMLCanvasElement) => {
+    // 将舵机角度（0-180）转换为画布坐标
+    const x = (servoX / 180) * canvas.width;
+    const y = (servoY / 180) * canvas.height;
+    return { x, y };
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -33,74 +45,113 @@ const VideoDisplay: React.FC<VideoDisplayProps> = ({
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (isActive && currentResult) {
-        // 绘制十字准星和目标框
-        const { position } = currentResult;
-        
-        // 绘制辅助线
-        ctx.strokeStyle = '#FF0000';
-        ctx.lineWidth = 2;
+      // 设置基本样式
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#FF0000';
+      
+      // 计算绘制位置 - 使用人脸检测结果或舵机位置
+      let drawPosition: { x: number; y: number };
+      let detectionActive = false;
+
+      if (currentResult && currentResult.confidence > 0.7) {
+        drawPosition = currentResult.position;
+        detectionActive = true;
+        lastDrawnPosition.current = drawPosition;
+      } else if (lastDrawnPosition.current) {
+        drawPosition = lastDrawnPosition.current;
+      } else {
+        drawPosition = calculateScreenCoordinates(currentServoX, currentServoY, canvas);
+      }
+
+      if (isActive) {
+        // 绘制十字准星和辅助线
         ctx.beginPath();
-        ctx.moveTo(0, position.y);
-        ctx.lineTo(canvas.width, position.y);
-        ctx.moveTo(position.x, 0);
-        ctx.lineTo(position.x, canvas.height);
+        ctx.moveTo(0, drawPosition.y);
+        ctx.lineTo(canvas.width, drawPosition.y);
+        ctx.moveTo(drawPosition.x, 0);
+        ctx.lineTo(drawPosition.x, canvas.height);
         ctx.stroke();
 
         // 绘制目标圈
         ctx.beginPath();
-        ctx.arc(position.x, position.y, 80, 0, Math.PI * 2);
+        ctx.arc(drawPosition.x, drawPosition.y, 80, 0, Math.PI * 2);
         ctx.stroke();
 
-        // 绘制 TARGET LOCKED 文本
-        ctx.font = '24px Arial';
-        ctx.fillStyle = '#FF00FF';
-        ctx.fillText('TARGET LOCKED', canvas.width - 200, 50);
+        // 设置状态文本样式
+        ctx.font = '32px "Arial Black"';
+        ctx.fillStyle = detectionActive ? '#FF00FF' : '#FF0000';
+        // 状态文本
+        const targetStatusText = detectionActive ? 'TARGET LOCKED' : 'NO TARGET';
+        const textWidth = ctx.measureText(targetStatusText).width;
+        ctx.fillText(targetStatusText, canvas.width - textWidth - 20, 40);
 
-        // 显示舵机角度
-        const servoX = Math.round((position.x / canvas.width) * 180);
-        const servoY = Math.round((position.y / canvas.height) * 180);
+        // 绘制状态面板背景
+        const statusText = [
+          `Servo X: ${currentServoX.toFixed(1)}°`,
+          `Servo Y: ${currentServoY.toFixed(1)}°`,
+          `Status: ${detectionActive ? 'Tracking' : 'Searching'}`,
+          ...(detectionActive && currentResult ? [
+            `Confidence: ${(currentResult.confidence * 100).toFixed(1)}%`,
+            `Size: ${currentResult.size.width.toFixed(0)}x${currentResult.size.height.toFixed(0)}`
+          ] : [])
+        ];
+
+        // 状态面板背景
+        const padding = 15;
+        const lineHeight = 30;
+        const boxWidth = 300;
+        const boxHeight = (statusText.length * lineHeight) + (padding * 2);
         
-        ctx.font = '16px Arial';
-        ctx.fillStyle = '#0000FF';
-        ctx.fillText(`Servo X: ${servoX} deg`, 10, 30);
-        ctx.fillText(`Servo Y: ${servoY} deg`, 10, 60);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(10, 10, boxWidth, boxHeight);
 
-        // 使用 drawDetectionResult 绘制调试信息
-        if (debug) {
-          drawDetectionResult(ctx, currentResult, true);
+        // 状态信息
+        ctx.font = '20px "Arial"';
+        statusText.forEach((text, index) => {
+          const y = 35 + (index * lineHeight);
+          
+          // 根据内容类型选择颜色
+          if (text.startsWith('Servo')) {
+            ctx.fillStyle = '#00FFFF'; // 舵机信息
+          } else if (text.includes('Confidence')) {
+            ctx.fillStyle = '#00FF00'; // 置信度
+          } else if (text.includes('Status')) {
+            ctx.fillStyle = detectionActive ? '#00FF00' : '#FFA500'; // 状态
+          } else {
+            ctx.fillStyle = '#FFFFFF'; // 其他信息
+          }
+          
+          ctx.fillText(text, 20, y);
+        });
+
+        // Debug信息
+        if (debug && currentResult) {
+          const debugInfo = [
+            `X: ${drawPosition.x.toFixed(1)}`,
+            `Y: ${drawPosition.y.toFixed(1)}`,
+            `FPS: ${currentResult.fps ?? 0}`,
+            `Process: ${currentResult.processingTime?.toFixed(1) ?? 0}ms`
+          ];
+
+          const debugBoxHeight = debugInfo.length * 25 + 20;
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.fillRect(
+            canvas.width - 200,
+            canvas.height - debugBoxHeight,
+            190,
+            debugBoxHeight
+          );
+
+          ctx.font = '16px "Arial"';
+          ctx.fillStyle = '#00FF00';
+          debugInfo.forEach((text, i) => {
+            ctx.fillText(
+              text,
+              canvas.width - 190,
+              canvas.height - debugBoxHeight + 25 + (i * 22)
+            );
+          });
         }
-      } else if (isActive) {
-        // 绘制默认的十字准星
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-
-        ctx.strokeStyle = '#FF0000';
-        ctx.lineWidth = 2;
-        
-        // 绘制十字线
-        ctx.beginPath();
-        ctx.moveTo(0, centerY);
-        ctx.lineTo(canvas.width, centerY);
-        ctx.moveTo(centerX, 0);
-        ctx.lineTo(centerX, canvas.height);
-        ctx.stroke();
-
-        // 绘制中心圆圈
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, 80, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // 绘制 NO TARGET 文本
-        ctx.font = '24px Arial';
-        ctx.fillStyle = '#FF0000';
-        ctx.fillText('NO TARGET', canvas.width - 180, 50);
-
-        // 显示默认舵机角度
-        ctx.font = '16px Arial';
-        ctx.fillStyle = '#0000FF';
-        ctx.fillText('Servo X: 90 deg', 10, 30);
-        ctx.fillText('Servo Y: 90 deg', 10, 60);
       }
 
       drawRef.current = requestAnimationFrame(draw);
@@ -113,7 +164,7 @@ const VideoDisplay: React.FC<VideoDisplayProps> = ({
         cancelAnimationFrame(drawRef.current);
       }
     };
-  }, [canvasRef, currentResult, isActive, debug]);
+  }, [canvasRef, currentResult, isActive, debug, currentServoX, currentServoY]);
 
   return (
     <div className="relative w-full h-[360px] bg-gray-900 rounded-lg overflow-hidden">
