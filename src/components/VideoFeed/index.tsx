@@ -2,9 +2,9 @@ import React, { useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { logger } from '@/utils/logger';
-import VideoDisplay from './VideoFeed/VideoDisplay';
-import CameraControls from './VideoFeed/CameraControls';
-import PermissionStatus from './VideoFeed/PermissionStatus';
+import VideoDisplay from './VideoDisplay';
+import CameraControls from './CameraControls';
+import PermissionStatus from './PermissionStatus';
 import { useCamera } from '@/hooks/useCamera';
 import type { FaceDetectionResult } from '@/types/faceDetection';
 

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { DebugPanel } from './DebugPanel';
-import VideoFeed  from './VideoFeed2';
+import VideoFeed  from './VideoFeed';
 import { generateResponse } from '../lib/openai';
 import { generateSpeech } from '@/lib/tts';
 import { setServoPosition, initializeServo,  ServoConfig, checkDeviceStatus } from '../lib/servoControl';

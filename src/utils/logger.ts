@@ -8,6 +8,7 @@ class Logger {
   async log(message: string, level: LogLevel = 'INFO', module: string = 'default') {  // Added module parameter
     try {
       await invoke('log_message', { message, level, module }); // Pass module to Rust
+      console.log(`[${level}] ${module}: ${message}`);
     } catch (error) {
       console.error('Failed to log message to backend:', error);
     }

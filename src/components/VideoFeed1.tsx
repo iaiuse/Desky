@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CameraOff, Camera, RefreshCw } from "lucide-react";
 import { invoke } from '@tauri-apps/api/tauri';
-import PermissionHandler from './PermissionHandler';
+import PermissionHandler from './VideoFeed/PermissionHandler';
 import { logger } from '../utils/logger';
 import { permissionManager } from '../utils/permissionUtils';
 import { FaceDetectionService } from '../services/FaceDetectionService';

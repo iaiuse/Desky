@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Camera, AlertCircle } from "lucide-react";
-import { permissionManager, type PermissionState } from '../utils/permissionUtils';
-import { logger } from '../utils/logger';
+import { permissionManager, type PermissionState } from '../../utils/permissionUtils';
+import { logger } from '../../utils/logger';
 
 const ModelName = 'PermissionHandler';
 
