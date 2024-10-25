@@ -217,12 +217,21 @@ export async function checkVideoPlayback(video: HTMLVideoElement): Promise<boole
   });
 }
 
-export function getVideoStreamInfo(stream: MediaStream): string {
-  try {
-    const videoTrack = stream.getVideoTracks()[0];
-    const settings = videoTrack.getSettings();
-    return `分辨率: ${settings.width}x${settings.height}, 帧率: ${settings.frameRate}`;
-  } catch (error) {
-    return '无法获取视频信息';
-  }
+// 视频流信息获取函数优化
+export  function getVideoStreamInfo(stream: MediaStream): string {
+  const videoTrack = stream.getVideoTracks()[0];
+  const settings = videoTrack.getSettings();
+  const capabilities = videoTrack.getCapabilities?.() || {};
+  
+  return `
+    Track label: ${videoTrack.label}
+    Resolution: ${settings.width}x${settings.height}
+    Frame rate: ${settings.frameRate}fps
+    ${capabilities ? `
+    Capabilities:
+      Width: ${capabilities.width?.min}-${capabilities.width?.max}
+      Height: ${capabilities.height?.min}-${capabilities.height?.max}
+      Frame rate: ${capabilities.frameRate?.min}-${capabilities.frameRate?.max}
+    ` : ''}
+  `.trim();
 }

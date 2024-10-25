@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { logger } from '../utils/logger';
-import { FaceDetectionService } from '../services/FaceDetectionService';
+import { VideoProcessor } from '../services/VideoProcessor';
 import { getVideoStreamInfo, getErrorMessage, detectCameraType } from '../utils/videoUtils';
 import type { FaceDetectionResult } from '../types/faceDetection';
 
@@ -42,74 +42,35 @@ export function useCamera(
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number>();
-  const faceDetectionServiceRef = useRef<FaceDetectionService | null>(null);
+  // 将 faceDetectionServiceRef 改为 videoProcessorRef
+  const videoProcessorRef = useRef<VideoProcessor | null>(null);
 
+  // 修改初始化视频处理部分
+  const initializeVideoProcessor = useCallback(async () => {
+    try {
+      if (!videoProcessorRef.current) {
+        logger.log('Creating new VideoProcessor instance', 'INFO', ModelName);
+        videoProcessorRef.current = new VideoProcessor();
+      }
   
-
-  const fetchCameras = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      logger.log('Fetching camera list', 'INFO', ModelName);
-
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices
-        .filter(device => device.kind === 'videoinput')
-        .map(device => ({
-          deviceId: device.deviceId,
-          label: device.label || '未命名摄像头',
-          type: detectCameraType(device.label)
-        }));
-
-      setCameras(videoDevices);
-      logger.log(`Found ${videoDevices.length} cameras`, 'INFO', ModelName);
-
-      if (videoDevices.length > 0 && !selectedCamera) {
-        const defaultCamera = videoDevices.find(c => c.type === 'builtin') || videoDevices[0];
-        setSelectedCamera(defaultCamera.deviceId);
-        logger.log(`Selected default camera: ${defaultCamera.label}`, 'INFO', ModelName);
-      }
+      await videoProcessorRef.current.initialize();
+      logger.log('Video processor initialized successfully', 'INFO', ModelName);
     } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      logger.log(`Error fetching cameras: ${error}`, 'ERROR', ModelName);
-      setError(errorMessage);
-      setCameras([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedCamera]);
-
-  // 修改initializeFaceDetection部分的代码
-  const initializeFaceDetection = useCallback(async () => {
-    try {
-      // 创建 FaceDetectionService 实例
-      faceDetectionServiceRef.current = new FaceDetectionService({
-        shakeFilterSize: 30,
-        smoothingFactor: 0.3,
-        minConfidence: 0.7,
-        skipFrames: 2
-      });
-
-      // 初始化服务
-      if (streamRef.current) {
-        await faceDetectionServiceRef.current.initialize(streamRef.current);
-        logger.log('Face detection service initialized successfully', 'INFO', ModelName);
-      }
-    } catch (error) {
-      logger.log(`Failed to initialize face detection: ${error}`, 'ERROR', ModelName);
-      setError('人脸检测初始化失败');
+      logger.log(`Failed to initialize video processor: ${error}`, 'ERROR', ModelName);
+      throw error;
     }
   }, []);
 
+  // 修改人脸检测处理部分
   const startFaceDetection = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || !faceDetectionServiceRef.current) return;
+    if (!videoRef.current || !canvasRef.current || !videoProcessorRef.current) return;
 
     const detectFace = async () => {
       try {
-        if (!faceDetectionServiceRef.current || !isCameraActive) return;
+        if (!videoProcessorRef.current || !isCameraActive || !videoRef.current) return;
 
-        const result = await faceDetectionServiceRef.current.detectFace();
-        if (result && videoRef.current) {
+        const result = await videoProcessorRef.current.detectFace(videoRef.current);
+        if (result) {
           onFaceDetected(result, {
             width: videoRef.current.videoWidth,
             height: videoRef.current.videoHeight
@@ -149,7 +110,8 @@ export function useCamera(
       streamRef.current = stream;
       setStreamInfo(getVideoStreamInfo(stream));
 
-      await initializeFaceDetection();
+      // 使用新的 VideoProcessor 初始化
+      await initializeVideoProcessor();
       logger.log('Camera initialized successfully', 'INFO', ModelName);
 
       return stream;
@@ -158,7 +120,7 @@ export function useCamera(
       logger.log(`Error initializing camera: ${error}`, 'ERROR', ModelName);
       throw new Error(errorMessage);
     }
-  }, [options, initializeFaceDetection]);
+  }, [options, initializeVideoProcessor]);
 
   const toggleCamera = useCallback(async (active: boolean) => {
     try {
@@ -189,9 +151,9 @@ export function useCamera(
           videoRef.current.srcObject = null;
         }
 
-        if (faceDetectionServiceRef.current) {
-          faceDetectionServiceRef.current.dispose();
-          faceDetectionServiceRef.current = null;
+        if (videoProcessorRef.current) {
+          videoProcessorRef.current.dispose();
+          videoProcessorRef.current = null;
         }
 
         setIsCameraActive(false);
@@ -207,6 +169,41 @@ export function useCamera(
       setIsLoading(false);
     }
   }, [selectedCamera, initializeCamera, startFaceDetection]);
+
+  
+
+  const fetchCameras = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      logger.log('Fetching camera list', 'INFO', ModelName);
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices
+        .filter(device => device.kind === 'videoinput')
+        .map(device => ({
+          deviceId: device.deviceId,
+          label: device.label || '未命名摄像头',
+          type: detectCameraType(device.label)
+        }));
+
+      setCameras(videoDevices);
+      logger.log(`Found ${videoDevices.length} cameras`, 'INFO', ModelName);
+
+      if (videoDevices.length > 0 && !selectedCamera) {
+        const defaultCamera = videoDevices.find(c => c.type === 'builtin') || videoDevices[0];
+        setSelectedCamera(defaultCamera.deviceId);
+        logger.log(`Selected default camera: ${defaultCamera.label}`, 'INFO', ModelName);
+      }
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      logger.log(`Error fetching cameras: ${error}`, 'ERROR', ModelName);
+      setError(errorMessage);
+      setCameras([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedCamera]);
 
   // 增加详细的权限检查逻辑
   const checkCameraPermission = useCallback(async () => {
@@ -337,8 +334,8 @@ export function useCamera(
         streamRef.current.getTracks().forEach(track => track.stop());
       }
 
-      if (faceDetectionServiceRef.current) {
-        faceDetectionServiceRef.current.dispose();
+      if (videoProcessorRef.current) {
+        videoProcessorRef.current.dispose();
       }
     };
   }, []);

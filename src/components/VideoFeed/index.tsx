@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { logger } from '@/utils/logger';
@@ -16,6 +16,13 @@ interface VideoFeedProps {
 }
 
 const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) => {
+  const [currentResult, setCurrentResult] = useState<FaceDetectionResult | null>(null);
+
+  const handleFaceDetected = useCallback((result: FaceDetectionResult, size: { width: number, height: number }) => {
+    setCurrentResult(result);
+    onFaceDetected(result, size);
+  }, [onFaceDetected]);
+
   const {
     isCameraActive,
     isLoading,
@@ -30,7 +37,7 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
     toggleCamera,
     setSelectedCamera,
     handlePermissionGranted
-  } = useCamera(onFaceDetected);
+  } = useCamera(handleFaceDetected);
 
   const handleCameraSelect = useCallback(async (deviceId: string) => {
     if (deviceId === selectedCamera) return;
@@ -77,6 +84,8 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
           isActive={isCameraActive}
           isLoading={isLoading}
           hasCameras={cameras.length > 0}
+          currentResult={currentResult}
+          debug={debug}
         />
 
         {debug && streamInfo && (

@@ -274,14 +274,10 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false }) 
           faceDetectionServiceRef.current = new FaceDetectionService({
             scaleFactor: 1.1,
             minNeighbors: 5,
-            minSize: 30,
-            maxSize: 0,
             minConfidence: 0.7,
             skipFrames: 2,
             shakeFilterSize: 30,
-            smoothingFactor: 0.3,
-            useImagePyramid: true,
-            pyramidScale: 0.5
+            smoothingFactor: 0.3
           });
         }
 
