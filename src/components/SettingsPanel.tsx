@@ -18,10 +18,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     apiKey: '',
     modelName: '',
     deviceName: '',
-    phoneIpAddress: '',
     systemPrompt: '',
     serialPort: '',
-    phonePort: '',
+    wsEndpoint: '',
     tts_baseUrl: '',
     tts_apiKey: '',
     tts_modelName: '',
@@ -150,19 +149,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
                   />
                 </div>
                 <div>
-                  <label className="block mb-1">手机IP地址</label>
-                  <Input
-                    value={settings.phoneIpAddress}
-                    onChange={(e) => handleChange('phoneIpAddress', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1">手机端口</label>
-                  <Input
-                    value={settings.phonePort}
-                    onChange={(e) => handleChange('phonePort', e.target.value)}
-                  />
-                </div>
+                <label className="block mb-1">WebSocket 服务地址</label>
+                <Input
+                  value={settings.wsEndpoint}
+                  onChange={(e) => handleChange('wsEndpoint', e.target.value)}
+                />
+              </div>
               </div>
             </CardContent>
           </Card>

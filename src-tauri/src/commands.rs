@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use serde::Serialize;
-use crate::socket_communication::SocketCommunication;
 use crate::device_manager::DeviceManager;
 
 
@@ -13,7 +12,6 @@ pub struct CameraInfoDto {
 
 // 定义允许跨线程访问的状态结构
 pub struct AppState {
-    pub socket_communication: Arc<SocketCommunication>,
     pub device_manager: Arc<DeviceManager>,
 }
 
@@ -37,17 +35,6 @@ pub async fn check_device_status(
     device_name: String,
 ) -> Result<bool, String> {
     state.device_manager.check_device_status(device_name)
-}
-
-#[tauri::command]
-pub async fn send_to_mobile_phone(
-    state: tauri::State<'_, AppState>,
-    ip_address: String,
-    port: u16,
-    kaomoji: String,
-    audio_buffer: Vec<u8>,
-) -> Result<(), String> {
-    state.socket_communication.send_to_mobile_phone(ip_address, port, kaomoji, audio_buffer)
 }
 
 // 原有的其他命令保持不变

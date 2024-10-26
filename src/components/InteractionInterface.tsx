@@ -4,17 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { DebugPanel } from './DebugPanel';
-import VideoFeed  from './VideoFeed';
+import VideoFeed from './VideoFeed';
 import { generateResponse } from '../lib/openai';
 import { generateSpeech } from '@/lib/tts';
-import { setServoPosition, initializeServo,  ServoConfig, checkDeviceStatus } from '../lib/servoControl';
+import { setServoPosition, initializeServo, ServoConfig, checkDeviceStatus } from '../lib/servoControl';
+import { initializeWebSocket, WebSocketConfig, sendMessage } from '../lib/webSocketService';
 import { FaceDetectionResult } from '../types/faceDetection';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
 import { db } from '../lib/db';
 import { logger } from '../utils/logger';
 import { SystemStatusCard } from './SystemStatusCard';
-import { checkMobilePhoneStatus, initializeConnection, mobilePhoneConfig } from '../lib/phoneCommunication';
 import AudioPlayer from './AudioPlayer';
 import { defaultVoices } from '../lib/voiceSettings';
 
@@ -23,25 +22,19 @@ const ModelName = "InteractionInterface";
 export const InteractionInterface: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [response, setResponse] = useState('');
-  const [mobilePhoneStatus, setMobilePhoneStatus] = useState('Checking...');
   const [deviceStatus, setDeviceStatus] = useState('Checking...');
+  const [wsStatus, setWsStatus] = useState('Checking...');
   const [servoX, setServoX] = useState(90);
   const [servoY, setServoY] = useState(90);
   const [deviceName, setDeviceName] = useState('');
-  const [ipAddress, setIpAddress] = useState('');
+  const [wsEndpoint, setWsEndpoint] = useState('');
   const [servoConfig, setServoConfig] = useState<ServoConfig>({
-    deviceName: 'Default Device',
-    ipAddress: 'Default IP'
-  });
-
-  const [mobilePhoneConfig, setMobilePhoneConfig] = useState<mobilePhoneConfig>({
-    ipAddress: 'Default IP',
-    port: 12345
+    deviceName: 'Default Device'
   });
   const [audioBuffer, setAudioBuffer] = useState<ArrayBuffer | null>(null);
-
   const [voices, setVoices] = useState<Array<{ id: string, name: string }>>(defaultVoices);
   const [selectedVoice, setSelectedVoice] = useState<string>(defaultVoices[0].id);
+
 
   useEffect(() => {
     const loadVoices = async () => {
@@ -71,103 +64,48 @@ export const InteractionInterface: React.FC = () => {
   useEffect(() => {
     const initializeComponent = async () => {
       try {
+        // 加载设置
         const deviceNameSetting = await db.settings.get('deviceName');
-        const phoneIpSetting = await db.settings.get('phoneIpAddress');
-        const phonePortSetting = await db.settings.get('phonePort');
-
-        logger.log(`deviceNameSetting: ${JSON.stringify(deviceNameSetting)}`, 'INFO', ModelName);
-        logger.log(`phoneIpSetting: ${JSON.stringify(phoneIpSetting)}`, 'INFO', ModelName);
-        logger.log(`phonePortSetting: ${JSON.stringify(phonePortSetting)}`, 'INFO', ModelName);
-
+        const wsEndpointSetting = await db.settings.get('wsEndpoint');
+        
         const deviceName = deviceNameSetting?.value || 'Not set';
-        const ipAddress = phoneIpSetting?.value || 'Not set';
-        let port: number;
-        if (phonePortSetting?.value) {
-          const parsedPort = parseInt(phonePortSetting.value, 10);
-          if (isNaN(parsedPort) || parsedPort < 0 || parsedPort > 65535) {
-            logger.log(`Invalid port number in settings: ${phonePortSetting.value}. Using default.`, 'WARN', ModelName);
-            port = 12345;
-          } else {
-            port = parsedPort;
-          }
-        } else {
-          port = 12345;
-        }
-
-        logger.log(`Port: ${port}`, 'INFO', ModelName);
-
+        const endpoint = wsEndpointSetting?.value || '';
+        
         setDeviceName(deviceName);
-        setIpAddress(ipAddress);
-
-        logger.log(`Device Name: ${deviceName}`, 'INFO', ModelName);
-        logger.log(`IP Address: ${ipAddress}`, 'INFO', ModelName);
-        logger.log(`Port: ${port}`, 'INFO', ModelName);
-
+        setWsEndpoint(endpoint);
+        
+        // 初始化舵机配置
         const servoConfig: ServoConfig = {
-          deviceName: deviceName,
-          ipAddress: ipAddress
+          deviceName: deviceName
         };
         setServoConfig(servoConfig);
 
-        const phoneConfig: mobilePhoneConfig = {
-          ipAddress: ipAddress,
-          port: port
-        };
-        setMobilePhoneConfig(phoneConfig);
-
+        // 检查设备状态
         const deviceCheck = await checkDeviceStatus(servoConfig);
         setDeviceStatus(deviceCheck ? 'Online' : 'Offline');
-        logger.log(`Servo Device Status: ${deviceStatus}`, 'INFO', ModelName);
 
         if (deviceCheck) {
           await initializeServo(servoConfig);
-          logger.log(`initializeServo success`, 'INFO', ModelName);
         }
 
-        const phoneCheck = await checkMobilePhoneStatus(phoneConfig);
-        setMobilePhoneStatus(phoneCheck ? 'Online' : 'Offline');
-        logger.log(`Phone Status: ${mobilePhoneConfig}`, 'INFO', ModelName);
-
-        if (phoneCheck) {
-          await initializeConnection(phoneConfig);
-          logger.log(`initializeConnection success`, 'INFO', ModelName);
+        // 初始化 WebSocket
+        if (endpoint) {
+          const wsConfig: WebSocketConfig = {
+            endpoint,
+            deviceName
+          };
+          await initializeWebSocket(wsConfig);
+          setWsStatus('Connected');
         }
 
       } catch (error) {
-        console.error('Error initializing component:', error);
         logger.log(`Error initializing component: ${error}`, 'ERROR', ModelName);
-        setDeviceStatus('Error');
-        setMobilePhoneStatus('Error');
+        setWsStatus('Error');
       }
     };
 
     initializeComponent();
   }, []);
-
-
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setResponse('Processing...');
-    setAudioBuffer(null);  // Reset audio buffer
-    try {
-      const result = await generateResponse(prompt);
-      setResponse(result.response);
-  
-      const newAudioBuffer = await generateSpeech(result.response, selectedVoice);
-      setAudioBuffer(newAudioBuffer);
-  
-      if (result.servoX !== undefined && result.servoY !== undefined && servoConfig) {
-        await setServoPosition({ x: result.servoX, y: result.servoY }, servoConfig);
-        setServoX(result.servoX);
-        setServoY(result.servoY);
-      }
-    } catch (error) {
-      console.error('Error processing request:', error);
-      logger.log(`Error processing request: ${error}`, 'ERROR', ModelName);
-      setResponse(`An error occurred while processing your request.${error}`);
-    }
-  };
 
   const handleServoControl = async (axis: 'X' | 'Y', value: number) => {
     if (axis === 'X') setServoX(value);
@@ -191,17 +129,49 @@ export const InteractionInterface: React.FC = () => {
     result: FaceDetectionResult,
     canvasSize: { width: number, height: number }
   ) => {
-    // 计算舵机角度
     const servoX = Math.round((result.position.x / canvasSize.width) * 180);
     const servoY = Math.round((result.position.y / canvasSize.height) * 180);
     
-    // 仅在置信度足够高时才移动舵机
     if (result.confidence > 0.7 && servoConfig) {
-      // 调用你的舵机控制函数
-      setServoPosition({
-        x: servoX,
-        y: servoY
-      }, servoConfig);
+      setServoPosition({ x: servoX, y: servoY }, servoConfig);
+      
+      // 发送人脸检测数据到服务器
+      sendMessage({
+        type: 'FACE_DETECTION',
+        payload: {
+          deviceName,
+          servoX,
+          servoY,
+          confidence: result.confidence,
+          timestamp: Date.now()
+        }
+      });
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim()) return;
+
+    try {
+      const response = await generateResponse(prompt);
+      setResponse(response);
+      
+      const audioBuffer = await generateSpeech(response, selectedVoice);
+      setAudioBuffer(audioBuffer);
+
+      // 发送聊天响应到服务器
+      sendMessage({
+        type: 'CHAT_RESPONSE',
+        payload: {
+          deviceName,
+          text: response,
+          audio: Array.from(new Uint8Array(audioBuffer)),
+          timestamp: Date.now()
+        }
+      });
+    } catch (error) {
+      logger.log(`Error in chat submission: ${error}`, 'ERROR', ModelName);
     }
   };
 
@@ -244,12 +214,12 @@ export const InteractionInterface: React.FC = () => {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <SystemStatusCard
-          networkStatus={mobilePhoneStatus}
-          deviceStatus={deviceStatus}
-          deviceId={deviceName}
-          ipAddress={ipAddress}
-        />
+      <SystemStatusCard
+        networkStatus={wsStatus}
+        deviceStatus={deviceStatus}
+        deviceId={deviceName}
+        ipAddress={wsEndpoint}
+      />
 
         <Card>
           <CardHeader>

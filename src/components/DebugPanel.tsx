@@ -129,7 +129,6 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ onServoControl, servoCon
           <TabsContent value="servo" className="space-y-4">
             <div>
               <p>Device Name: {servoConfig.deviceName}</p>
-              <p>IP Address: {servoConfig.ipAddress}</p>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Button onClick={() => handleServoControl('X', 0)}>Left</Button>

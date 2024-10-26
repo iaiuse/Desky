@@ -10,7 +10,6 @@ export interface ServoPosition {
 
 export interface ServoConfig {
   deviceName: string;
-  ipAddress: string;
 }
 
 export async function setServoPosition(position: ServoPosition, config: ServoConfig): Promise<void> {
@@ -19,7 +18,6 @@ export async function setServoPosition(position: ServoPosition, config: ServoCon
     
     await invoke('set_servo_position', { 
       deviceName: config.deviceName,
-      ipAddress: config.ipAddress,
       x: position.x, 
       y: position.y 
     });
