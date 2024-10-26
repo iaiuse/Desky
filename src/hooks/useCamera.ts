@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { logger } from '../utils/logger';
-import { VideoProcessor } from '../services/VideoProcessor';
+import { FaceDetectionService } from '../services/FaceDetectionService';
 import { getVideoStreamInfo, getErrorMessage, detectCameraType } from '../utils/videoUtils';
 import type { FaceDetectionResult } from '../types/faceDetection';
 
@@ -43,7 +43,7 @@ export function useCamera(
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number>();
   // 将 faceDetectionServiceRef 改为 videoProcessorRef
-  const videoProcessorRef = useRef<VideoProcessor | null>(null);
+  const videoProcessorRef = useRef<FaceDetectionService | null>(null);
 
   // 修改初始化视频处理部分
   // useCamera.ts
@@ -68,7 +68,7 @@ const initializeVideoProcessor = useCallback(async () => {
           }
 
           if (!videoProcessorRef.current) {
-              videoProcessorRef.current = new VideoProcessor({
+              videoProcessorRef.current = new FaceDetectionService({
                   skipFrames: 2,
                   smoothingFactor: 0.5,
                   ...(webglContext ? { webglContext } : {})

@@ -1,240 +1,139 @@
-import '@mediapipe/face_detection';
-import * as faceDetection from '@mediapipe/face_detection';
-import { Camera } from '@mediapipe/camera_utils';
+import * as faceapi from 'face-api.js';
 import { logger } from '../utils/logger';
-
-const ModelName = 'FaceDetectionService';
-
-export interface FaceDetectionResult {
-  position: { x: number; y: number };
-  size: { width: number; height: number };
-  confidence: number;
-  landmarks?: { x: number; y: number }[];
-}
-
-export interface FaceDetectionConfig {
-  shakeFilterSize?: number;
-  smoothingFactor?: number;
-  minConfidence?: number;
-  skipFrames?: number;
-  scaleFactor?: number;
-  minNeighbors?: number;  // 添加缺失的配置项
-}
-
-export interface DebugInfo {
-  initialized: boolean;
-  performance: {
-    frameCount: number;
-    fps: number;
-    lastProcessingTime: number;
-  };
-  config: Required<FaceDetectionConfig>;
-  videoInfo: {
-    width: number;
-    height: number;
-    active: boolean;
-  } | null;
-}
+import { FaceDetectionResult } from '@/types/faceDetection';
 
 export class FaceDetectionService {
-  private detector: faceDetection.FaceDetection;
-  private camera: Camera | null = null;
-  private videoElement: HTMLVideoElement | null = null;
-  private initialized = false;
-  private lastResults: FaceDetectionResult[] = [];
-  private positionHistory: { x: number; y: number }[] = [];
-  private frameCount = 0;
-  private lastProcessingTime = 0;
-  private processingStartTime = 0;
-  private fpsUpdateTime = 0;
-  private currentFps = 0;
-  private fpsCounter = 0;
-  
-  private config: Required<FaceDetectionConfig> = {
-    shakeFilterSize: 30,
-    smoothingFactor: 0.3,
-    minConfidence: 0.7,
-    skipFrames: 2,
-    scaleFactor: 1.1,
-    minNeighbors: 5
-  };
-
-  constructor(config?: FaceDetectionConfig) {
-    this.config = { ...this.config, ...config };
+    private initialized = false;
+    private videoElement: HTMLVideoElement | null = null;
+    private frameCount = 0;
+    private lastProcessingTime = 0;
+    private currentFps = 0;
     
-    this.detector = new faceDetection.FaceDetection({
-      locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4/${file}`;
-      }
-    });
+    constructor(private config: {
+        skipFrames: number;
+        minConfidence?: number;
+        smoothingFactor?: number;
+    }) {}
 
-    logger.log('FaceDetectionService instance created', 'INFO', ModelName);
-  }
+    async initialize(): Promise<void> {
+        if (this.initialized) return;
 
-  async initialize(stream: MediaStream): Promise<void> {
-    try {
-      if (this.initialized) {
-        logger.log('Already initialized', 'INFO', ModelName);
-        return;
-      }
+        try {
+            logger.log('Loading face-api models...', 'INFO', 'VideoProcessor');
+            
+            // 添加更详细的日志
+            const modelPath = '/models';
+            logger.log(`Loading models from: ${modelPath}`, 'INFO', 'VideoProcessor');
+            
+            try {
+                await faceapi.nets.tinyFaceDetector.load(modelPath);
+                logger.log('TinyFaceDetector model loaded', 'INFO', 'VideoProcessor');
+            } catch (e) {
+                logger.log(`Failed to load TinyFaceDetector: ${e}`, 'ERROR', 'VideoProcessor');
+                throw e;
+            }
 
-      logger.log('Initializing face detection...', 'INFO', ModelName);
+            this.initialized = true;
+            logger.log('Face-api models loaded successfully', 'INFO', 'VideoProcessor');
+        } catch (error) {
+            logger.log(`Failed to initialize face-api: ${error}`, 'ERROR', 'VideoProcessor');
+            throw error;
+        }
+    }
 
-      // 设置检测器配置
-      await this.detector.setOptions({
-        minDetectionConfidence: this.config.minConfidence
-      } as faceDetection.Options);
-
-      // 创建视频元素
-      this.videoElement = document.createElement('video');
-      this.videoElement.srcObject = stream;
-      this.videoElement.setAttribute('playsinline', 'true');
-
-      // 等待视频加载
-      await new Promise<void>((resolve) => {
-        if (!this.videoElement) return;
-        this.videoElement.onloadedmetadata = () => {
-          this.videoElement?.play().then(resolve);
-        };
-      });
-
-      // 设置检测器回调
-      this.detector.onResults((results: faceDetection.Results) => {
-        this.processingStartTime = performance.now();
-        
-        if (results.detections && results.detections.length > 0) {
-          const detection = results.detections[0];
-          // 使用类型断言来处理MediaPipe的类型
-          const boundingBox = detection.boundingBox as { xCenter: number; yCenter: number; width: number; height: number };
-          const detectionScore = (detection as any).score?.[0] ?? 0.0;
-          
-          const result: FaceDetectionResult = {
-            position: {
-              x: boundingBox.xCenter * this.videoElement!.videoWidth,
-              y: boundingBox.yCenter * this.videoElement!.videoHeight
-            },
-            size: {
-              width: boundingBox.width * this.videoElement!.videoWidth,
-              height: boundingBox.height * this.videoElement!.videoHeight
-            },
-            confidence: detectionScore,
-            landmarks: detection.landmarks?.map(landmark => ({
-              x: landmark.x * this.videoElement!.videoWidth,
-              y: landmark.y * this.videoElement!.videoHeight
-            }))
-          };
-
-          const smoothedResult = this.applySmoothing(result);
-          this.lastResults = [smoothedResult];
-        } else {
-          this.lastResults = [];
+    async detectFace(video: HTMLVideoElement): Promise<FaceDetectionResult | null> {
+        if (!this.initialized || !video) {
+            logger.log('Detection skipped: not initialized or no video', 'DEBUG', 'VideoProcessor');
+            return null;
         }
 
-        this.updatePerformanceMetrics();
-      });
-
-      // 设置相机
-      this.camera = new Camera(this.videoElement, {
-        onFrame: async () => {
-          if (this.frameCount++ % this.config.skipFrames === 0) {
-            if (this.videoElement) {
-              await this.detector.send({ image: this.videoElement });
+        try {
+            if (this.videoElement !== video) {
+                this.videoElement = video;
             }
-          }
-        },
-        width: 1280,
-        height: 720
-      });
 
-      await this.camera.start();
-      
-      this.initialized = true;
-      logger.log('Face detection initialized successfully', 'INFO', ModelName);
-    } catch (error) {
-      logger.log(`Initialization failed: ${error}`, 'ERROR', ModelName);
-      throw error;
-    }
-  }
+            // 确保视频已经准备好
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+                logger.log('Video not ready yet', 'DEBUG', 'VideoProcessor');
+                return null;
+            }
 
-  private updatePerformanceMetrics(): void {
-    // 更新处理时间
-    this.lastProcessingTime = performance.now() - this.processingStartTime;
+            if (this.frameCount++ % this.config.skipFrames !== 0) {
+                return null;
+            }
 
-    // 更新FPS
-    this.fpsCounter++;
-    const now = performance.now();
-    if (now - this.fpsUpdateTime >= 1000) {
-      this.currentFps = Math.round((this.fpsCounter * 1000) / (now - this.fpsUpdateTime));
-      this.fpsCounter = 0;
-      this.fpsUpdateTime = now;
-    }
-  }
+            const startTime = performance.now();
+            logger.log('Starting face detection...', 'DEBUG', 'VideoProcessor');
 
-  private applySmoothing(result: FaceDetectionResult): FaceDetectionResult {
-    this.positionHistory.push(result.position);
+            // 使用更宽松的检测参数
+            const options = new faceapi.TinyFaceDetectorOptions({
+                inputSize: 160,        // 降低输入大小以提高性能
+                scoreThreshold: 0.1    // 降低阈值使检测更容易
+            });
 
-    if (this.positionHistory.length > this.config.shakeFilterSize) {
-      this.positionHistory.shift();
-    }
+            logger.log('Calling detectSingleFace...', 'DEBUG', 'VideoProcessor');
+            const detection = await faceapi.detectSingleFace(video, options);
+            logger.log(`Detection result: ${detection ? 'Face found' : 'No face'}`, 'DEBUG', 'VideoProcessor');
 
-    const smoothedPosition = this.positionHistory.reduce((acc, pos, index) => {
-      const weight = Math.pow(this.config.smoothingFactor, this.positionHistory.length - index - 1);
-      return {
-        x: acc.x + pos.x * weight,
-        y: acc.y + pos.y * weight
-      };
-    }, { x: 0, y: 0 });
+            if (detection) {
+                const { box, score } = detection;
+                logger.log(`Face detected with score: ${score}`, 'DEBUG', 'VideoProcessor');
+                logger.log(`Box: x=${box.x}, y=${box.y}, w=${box.width}, h=${box.height}`, 'DEBUG', 'VideoProcessor');
 
-    const weightSum = this.positionHistory.reduce((sum, _, index) => {
-      return sum + Math.pow(this.config.smoothingFactor, this.positionHistory.length - index - 1);
-    }, 0);
+                const result: FaceDetectionResult = {
+                    position: {
+                        x: box.x + box.width / 2,
+                        y: box.y + box.height / 2
+                    },
+                    size: {
+                        width: box.width,
+                        height: box.height
+                    },
+                    confidence: score,
+                    processingTime: performance.now() - startTime,
+                    fps: this.calculateFps(startTime)
+                };
 
-    smoothedPosition.x /= weightSum;
-    smoothedPosition.y /= weightSum;
+                return result;
+            }
 
-    return {
-      ...result,
-      position: smoothedPosition
-    };
-  }
-
-  getDebugInfo(): DebugInfo {
-    return {
-      initialized: this.initialized,
-      performance: {
-        frameCount: this.frameCount,
-        fps: this.currentFps,
-        lastProcessingTime: this.lastProcessingTime,
-      },
-      config: this.config,
-      videoInfo: this.videoElement ? {
-        width: this.videoElement.videoWidth,
-        height: this.videoElement.videoHeight,
-        active: !this.videoElement.paused
-      } : null
-    };
-  }
-
-  async detectFace(): Promise<FaceDetectionResult | null> {
-    if (!this.initialized) {
-      return null;
+            return null;
+        } catch (error) {
+            logger.log(`Error in face detection: ${error}`, 'ERROR', 'VideoProcessor');
+            if (error instanceof Error) {
+                logger.log(`Error stack: ${error.stack}`, 'ERROR', 'VideoProcessor');
+            }
+            return null;
+        }
     }
 
-    return this.lastResults[0] || null;
-  }
+    private calculateFps(currentTime: number): number {
+        if (this.lastProcessingTime) {
+            const delta = currentTime - this.lastProcessingTime;
+            this.currentFps = 1000 / delta;
+        }
+        this.lastProcessingTime = currentTime;
+        return Math.round(this.currentFps);
+    }
 
-  dispose(): void {
-    if (this.camera) {
-      this.camera.stop();
+    setVideo(video: HTMLVideoElement): void {
+        this.videoElement = video;
+        logger.log('Video element set', 'INFO', 'VideoProcessor');
     }
-    if (this.videoElement) {
-      this.videoElement.srcObject = null;
+
+    isWebGLEnabled(): boolean {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        const hasWebGL = !!gl;
+        if (gl) {
+            (gl as WebGLRenderingContext).getExtension('WEBGL_lose_context')?.loseContext();
+        }
+        return hasWebGL;
     }
-    this.detector.close();
-    this.initialized = false;
-    this.lastResults = [];
-    this.positionHistory = [];
-    this.frameCount = 0;
-    logger.log('Face detection service disposed', 'INFO', ModelName);
-  }
+
+    dispose(): void {
+        // Clean up resources
+        this.initialized = false;
+        this.videoElement = null;
+    }
 }
