@@ -19,9 +19,9 @@ interface CameraOptions {
 }
 
 const DEFAULT_CAMERA_OPTIONS: CameraOptions = {
-  width: { ideal: 1280 },
-  height: { ideal: 720 },
-  frameRate: { ideal: 30 }
+  width: { ideal: 640 },  // 降低分辨率
+  height: { ideal: 480 }, // 降低分辨率
+  frameRate: { ideal: 24 } // 降低帧率
 };
 
 export function useCamera(
@@ -46,49 +46,134 @@ export function useCamera(
   const videoProcessorRef = useRef<VideoProcessor | null>(null);
 
   // 修改初始化视频处理部分
-  const initializeVideoProcessor = useCallback(async () => {
-    try {
-      if (!videoProcessorRef.current) {
-        logger.log('Creating new VideoProcessor instance', 'INFO', ModelName);
-        videoProcessorRef.current = new VideoProcessor();
+  // useCamera.ts
+
+const initializeVideoProcessor = useCallback(async () => {
+  let retryCount = 0;
+  const maxRetries = 3;
+
+  while (retryCount < maxRetries) {
+      try {
+          if (!videoRef.current || !canvasRef.current) {
+              throw new Error('Video or canvas element not initialized');
+          }
+
+          // Try WebGL2 first, then WebGL1, then fallback to no WebGL
+          const webglContext = canvasRef.current.getContext('webgl2') || 
+                             canvasRef.current.getContext('webgl');
+
+          if (!webglContext) {
+              logger.log('WebGL not supported - falling back to CPU processing', 'WARN', ModelName);
+              // Continue without WebGL context
+          }
+
+          if (!videoProcessorRef.current) {
+              videoProcessorRef.current = new VideoProcessor({
+                  skipFrames: 2,
+                  smoothingFactor: 0.5,
+                  ...(webglContext ? { webglContext } : {})
+              });
+          }
+
+          await videoProcessorRef.current.initialize();
+          if (videoRef.current) {
+              videoProcessorRef.current.setVideo(videoRef.current);
+          }
+          
+          logger.log('Video processor initialized successfully', 'INFO', ModelName);
+          return;
+      } catch (error) {
+          retryCount++;
+          logger.log(`Initialization attempt ${retryCount} failed: ${error}`, 'WARN', ModelName);
+          
+          if (retryCount === maxRetries) {
+              logger.log(`All initialization attempts failed`, 'ERROR', ModelName);
+              throw new Error(`Unable to initialize video processor after ${maxRetries} attempts`);
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, 1000));
       }
-  
-      await videoProcessorRef.current.initialize();
-      logger.log('Video processor initialized successfully', 'INFO', ModelName);
-    } catch (error) {
-      logger.log(`Failed to initialize video processor: ${error}`, 'ERROR', ModelName);
-      throw error;
-    }
-  }, []);
+  }
+}, []);
 
   // 修改人脸检测处理部分
   const startFaceDetection = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || !videoProcessorRef.current) return;
+    logger.log('Attempting to start face detection...', 'INFO', ModelName);
+    
+    // 检查所有必需的条件
+    if (!videoRef.current) {
+        logger.log('Video ref is missing', 'WARN', ModelName);
+        return;
+    }
+    if (!canvasRef.current) {
+        logger.log('Canvas ref is missing', 'WARN', ModelName);
+        return;
+    }
+    if (!videoProcessorRef.current) {
+        logger.log('VideoProcessor ref is missing', 'WARN', ModelName);
+        return;
+    }
+    if (!isCameraActive) {
+        logger.log('Camera is not active', 'WARN', ModelName);
+        return;
+    }
+
+    logger.log('All requirements met, starting detection loop', 'INFO', ModelName);
 
     const detectFace = async () => {
-      try {
-        if (!videoProcessorRef.current || !isCameraActive || !videoRef.current) return;
+        try {
+            // 再次检查条件（因为可能在循环过程中发生变化）
+            if (!videoProcessorRef.current || !isCameraActive || !videoRef.current) {
+                logger.log('Detection requirements no longer met', 'DEBUG', ModelName);
+                return;
+            }
 
-        const result = await videoProcessorRef.current.detectFace(videoRef.current);
-        if (result) {
-          onFaceDetected(result, {
-            width: videoRef.current.videoWidth,
-            height: videoRef.current.videoHeight
-          });
+            // 检查视频是否准备好
+            if (videoRef.current.readyState !== videoRef.current.HAVE_ENOUGH_DATA) {
+                logger.log('Video not ready yet', 'DEBUG', ModelName);
+                if (isCameraActive) {
+                    animationFrameRef.current = requestAnimationFrame(detectFace);
+                }
+                return;
+            }
+
+            logger.log('Attempting face detection', 'DEBUG', ModelName);
+            const result = await videoProcessorRef.current.detectFace(videoRef.current);
+            
+            if (result) {
+                logger.log(`Face detected at (${result.position.x}, ${result.position.y}) with confidence ${result.confidence}`, 'INFO', ModelName);
+                onFaceDetected(result, {
+                    width: videoRef.current.videoWidth,
+                    height: videoRef.current.videoHeight
+                });
+            }
+
+        } catch (error) {
+            logger.log(`Error in face detection loop: ${error}`, 'ERROR', ModelName);
         }
-      } catch (error) {
-        logger.log(`Error in face detection: ${error}`, 'ERROR', ModelName);
-      }
 
-      animationFrameRef.current = requestAnimationFrame(detectFace);
+        if (isCameraActive) {
+            animationFrameRef.current = requestAnimationFrame(detectFace);
+        }
     };
 
+    logger.log('Starting face detection loop', 'INFO', ModelName);
     detectFace();
   }, [isCameraActive, onFaceDetected]);
+
+  // 确保在摄像头激活时启动检测
+  useEffect(() => {
+    logger.log(`Camera active state changed: ${isCameraActive}`, 'INFO', ModelName);
+    if (isCameraActive) {
+        startFaceDetection();
+    }
+  }, [isCameraActive, startFaceDetection]);
 
   const initializeCamera = useCallback(async (deviceId: string) => {
     try {
       logger.log(`Initializing camera: ${deviceId}`, 'INFO', ModelName);
+      logger.log(`Camera options: ${JSON.stringify(options)}`, 'INFO', ModelName);
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           deviceId: { exact: deviceId },
@@ -96,28 +181,64 @@ export function useCamera(
         }
       });
 
+      logger.log(`Stream obtained successfully`, 'INFO', ModelName);
+
       if (!videoRef.current || !canvasRef.current) {
         throw new Error('Video or canvas element not initialized');
       }
 
       videoRef.current.srcObject = stream;
-      await videoRef.current.play();
+      logger.log(`Video source set`, 'INFO', ModelName);
 
-      // Set canvas size to match video
+      await videoRef.current.play();
+      logger.log(`Video playback started`, 'INFO', ModelName);
+
       canvasRef.current.width = videoRef.current.videoWidth;
       canvasRef.current.height = videoRef.current.videoHeight;
+      logger.log(`Canvas size set to ${canvasRef.current.width}x${canvasRef.current.height}`, 'INFO', ModelName);
 
       streamRef.current = stream;
       setStreamInfo(getVideoStreamInfo(stream));
+      logger.log(`Stream info set`, 'INFO', ModelName);
 
-      // 使用新的 VideoProcessor 初始化
+      logger.log(`Starting VideoProcessor initialization`, 'INFO', ModelName);
       await initializeVideoProcessor();
+      logger.log(`VideoProcessor initialized`, 'INFO', ModelName);
+
+      // 修改这部分代码，安全地检查上下文类型
+      const contextTypes = ['2d', 'webgl', 'experimental-webgl'] as const;
+      let gl = null;
+      for (const type of contextTypes) {
+        gl = canvasRef.current.getContext(type);
+        if (gl) {
+          logger.log(`Context obtained: ${type}`, 'INFO', ModelName);
+          break;
+        }
+      }
+
+      if (!gl) {
+        logger.log(`Could not get any rendering context`, 'WARN', ModelName);
+      } else {
+        logger.log(`Rendering context details:`, 'INFO', ModelName);
+        // 安全地检查上下文类型
+        if (gl instanceof CanvasRenderingContext2D) {
+          logger.log(`- Type: 2D Context`, 'INFO', ModelName);
+        } else if (gl instanceof WebGLRenderingContext) {
+          logger.log(`- Type: WebGL`, 'INFO', ModelName);
+          logger.log(`- WebGL vendor: ${gl.getParameter(gl.VENDOR)}`, 'INFO', ModelName);
+          logger.log(`- WebGL renderer: ${gl.getParameter(gl.RENDERER)}`, 'INFO', ModelName);
+          logger.log(`- WebGL version: ${gl.getParameter(gl.VERSION)}`, 'INFO', ModelName);
+          logger.log(`- GLSL version: ${gl.getParameter(gl.SHADING_LANGUAGE_VERSION)}`, 'INFO', ModelName);
+        }
+      }
+
       logger.log('Camera initialized successfully', 'INFO', ModelName);
 
       return stream;
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       logger.log(`Error initializing camera: ${error}`, 'ERROR', ModelName);
+      logger.log(`Error stack: ${(error as Error).stack}`, 'INFO', ModelName);
       throw new Error(errorMessage);
     }
   }, [options, initializeVideoProcessor]);
@@ -236,7 +357,7 @@ export function useCamera(
       logger.log('Permissions API not available, trying direct camera access', 'INFO', ModelName);
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       
-      // 立即停止流，因为这只是权限检查
+      // 立即停止流，为这只是权限检查
       stream.getTracks().forEach(track => track.stop());
       
       setPermissionStatus('granted');
@@ -364,3 +485,4 @@ export function useCamera(
 }
 
 export type { CameraOptions };  // 只导出CameraOptions，因为CameraDevice已经在上面导出了
+

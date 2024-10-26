@@ -22,7 +22,12 @@
         "readFile": true,
         "writeFile": true,
         "readDir": true,
-        "scope": ["$APP/*"]
+        "createDir": true,
+        "scope": ["$APP/*", "$RESOURCE/*", "$APPDATA/*"]
+      },
+      "http": {
+        "all": false,
+        "request": true
       }
     },
     "windows": [

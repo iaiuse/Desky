@@ -1,10 +1,8 @@
-
-use std::sync::{Arc};
-
-
+use std::sync::Arc;
 use serde::Serialize;
 use crate::socket_communication::SocketCommunication;
 use crate::device_manager::DeviceManager;
+
 
 #[derive(Serialize)]
 pub struct CameraInfoDto {

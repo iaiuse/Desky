@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api';
 
-type LogLevel = 'INFO' | 'WARN' | 'ERROR';
+type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
 
 class Logger {
   
