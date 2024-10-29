@@ -140,31 +140,46 @@ export const InteractionInterface: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim()) return;
-
     try {
+      logger.log(`Starting chat submission with prompt: ${prompt}`, 'INFO', ModelName);
+
+      // 生成回复
       const result = await generateResponse(prompt);
+      logger.log(`Generated response: ${JSON.stringify(result)}`, 'INFO', ModelName);
       setResponse(result);
-      
+
+      // 生成语音
       const audioBuffer = await generateSpeech(result.response, selectedVoice);
+      logger.log(`Generated speech buffer size: ${audioBuffer.byteLength}`, 'DEBUG', ModelName);
       setAudioBuffer(audioBuffer);
 
-      // 使用统一的消息服务发送数据
+      // 检查设备名称
+      if (!deviceName) {
+        logger.log('Device name is not set', 'WARN', ModelName);
+      }
+      logger.log(`Current device name: ${deviceName}`, 'DEBUG', ModelName);
+
+      // 发送消息到服务器
+      logger.log('Preparing to send message to server', 'DEBUG', ModelName);
       await sendMessage({
         text: result.response,
-        audioBuffer,
-        expression: result.kaomoji || 'neutral', // 可以根据实际情况设置表情
+        audio: audioBuffer,
+        expression: result.kaomoji ||'neutral',
         deviceName
       });
+      logger.log('Message sent to server successfully', 'INFO', ModelName);
 
-      // Update servo position if available
-      if (result.servoX && result.servoY) {
-        await setServoPosition(result.servoX, result.servoY);
-      }
-
-      // Generate speech for the response text
-      if (result.response) {
-        await generateSpeech(result.response, selectedVoice);
+      // 更新舵机位置
+      if (result.servoX !== undefined && result.servoY !== undefined) {
+        logger.log(
+          `Updating servo position: X=${result.servoX}, Y=${result.servoY}, Device=${deviceName}`,
+          'DEBUG',
+          ModelName
+        );
+        await setServoPosition({ x: result.servoX, y: result.servoY }, servoConfig);
+        logger.log('Servo position updated successfully', 'INFO', ModelName);
+      } else {
+        logger.log('No servo position update required', 'DEBUG', ModelName);
       }
 
     } catch (error) {
