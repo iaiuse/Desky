@@ -75,13 +75,28 @@ jobs:
           libsoup2.4-dev \
           libjavascriptcoregtk-4.0-dev
 
+    - name: 安装 Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: x86_64-apple-darwin
+        profile: minimal
+        override: true
+
+    - name: 安装 macOS 构建目标
+      if: matrix.os == 'macos-latest' || matrix.os == 'macos-11'
+      run: |
+        rustup target add x86_64-apple-darwin
+        rustup target add aarch64-apple-darwin
+
     - name: 构建 Tauri 应用 (现代 macOS)
       if: matrix.target == 'macos-modern'
       uses: tauri-apps/tauri-action@v0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        args: --target universal-apple-darwin
+        args: --target "universal-apple-darwin"
+        includeDebug: false
 
     - name: 构建 Tauri 应用 (Big Sur)
       if: matrix.target == 'macos-bigsur'
