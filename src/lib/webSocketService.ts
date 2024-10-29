@@ -1,104 +1,128 @@
+import { invoke } from '@tauri-apps/api/tauri';
 import { logger } from '../utils/logger';
+import { db } from './db';
 
 const ModelName = "WebSocketService";
 
-export interface WebSocketConfig {
-  endpoint: string;
+// Types
+export interface MessagePayload {
+  text: string;
+  audioBuffer: ArrayBuffer;
+  expression: string;
   deviceName: string;
 }
 
-export interface WebSocketMessage {
-  type: 'FACE_DETECTION' | 'CHAT_REQUEST' | 'CHAT_RESPONSE' | 'AUDIO_READY';
-  payload: any;
-}
-
-let wsInstance: WebSocket | null = null;
-let reconnectTimer: NodeJS.Timeout | null = null;
-
-export async function initializeWebSocket(config: WebSocketConfig): Promise<void> {
+// Get server URL from settings
+async function getServerUrl(): Promise<string> {
   try {
-    logger.log(`Initializing WebSocket connection to ${config.endpoint}`, 'INFO', ModelName);
-    wsInstance = new WebSocket(config.endpoint);
-    
-    wsInstance.onopen = () => {
-      logger.log('WebSocket connected successfully', 'INFO', ModelName);
-      // 发送初始化消息
-      sendMessage({
-        type: 'CHAT_REQUEST',
-        payload: {
-          deviceName: config.deviceName,
-          timestamp: Date.now()
-        }
-      });
-    };
-
-    wsInstance.onclose = () => {
-      logger.log('WebSocket connection closed', 'WARN', ModelName);
-      scheduleReconnect(config);
-    };
-
-    wsInstance.onerror = (error) => {
-      logger.log(`WebSocket error: ${error}`, 'ERROR', ModelName);
-    };
-
-    wsInstance.onmessage = handleMessage;
+    const serverConfig = await db.settings.get('wsEndpoint');
+    return serverConfig?.value || '';
   } catch (error) {
-    logger.log(`Failed to initialize WebSocket: ${error}`, 'ERROR', ModelName);
+    logger.log(`Failed to get server URL from settings: ${error}`, 'ERROR', ModelName);
     throw error;
   }
 }
 
-export async function checkWebSocketStatus(): Promise<boolean> {
+// Core Communication Functions
+export async function sendMessage(message: any): Promise<void> {
   try {
-    return wsInstance?.readyState === WebSocket.OPEN;
-  } catch (error) {
-    logger.log(`Failed to check WebSocket status: ${error}`, 'ERROR', ModelName);
-    return false;
-  }
-}
-
-export function sendMessage(message: WebSocketMessage): void {
-  if (wsInstance?.readyState === WebSocket.OPEN) {
-    wsInstance.send(JSON.stringify(message));
-    logger.log(`Message sent: ${JSON.stringify(message)}`, 'INFO', ModelName);
-  } else {
-    logger.log('WebSocket not connected, message not sent', 'WARN', ModelName);
-  }
-}
-
-function handleMessage(event: MessageEvent) {
-  try {
-    const message = JSON.parse(event.data) as WebSocketMessage;
-    logger.log(`Received message: ${JSON.stringify(message)}`, 'INFO', ModelName);
-    // 处理不同类型的消息
-    switch (message.type) {
-      case 'CHAT_RESPONSE':
-        // 处理聊天响应
-        break;
-      case 'AUDIO_READY':
-        // 处理音频就绪
-        break;
+    const serverUrl = await getServerUrl();
+    logger.log(`Using server URL: ${serverUrl}`, 'DEBUG', ModelName);
+    
+    // 创建 FormData 对象
+    const formData = new FormData();
+    
+    // 添加音频数据（必需字段）
+    if (message.audio) {
+      const audioBlob = new Blob([message.audio], { type: 'audio/wav' });
+      formData.append('audio', audioBlob, 'audio.wav');
+    } else {
+      // 如果没有音频，创建一个空的音频文件
+      const emptyAudio = new Uint8Array(44); // WAV header size
+      const emptyBlob = new Blob([emptyAudio], { type: 'audio/wav' });
+      formData.append('audio', emptyBlob, 'audio.wav');
     }
+    
+    // 添加表情数据（必需字段）
+    formData.append('expression', message.expression || 'neutral');
+
+    // 将 FormData 转换为字节数组
+    const formDataArray = await formDataToBytes(formData);
+
+    // 构建请求配置
+    const requestConfig = {
+      targetUrl: `${serverUrl}/api/message`,
+      method: 'POST',
+      body: formDataArray
+    };
+
+    const response = await invoke('proxy_request', requestConfig);
+    logger.log(`Response received: ${response}`, 'INFO', ModelName);
+    
+    return;
   } catch (error) {
-    logger.log(`Error handling message: ${error}`, 'ERROR', ModelName);
+    logger.log(`Failed to send message: ${error}`, 'ERROR', ModelName);
+    throw error;
   }
 }
 
-function scheduleReconnect(config: WebSocketConfig) {
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
+// 新的辅助函数：将 FormData 转换为字节数组
+async function formDataToBytes(formData: FormData): Promise<number[]> {
+  const encoder = new TextEncoder();
+  const boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW';
+  let parts: Uint8Array[] = [];
+
+  for (const [key, value] of formData.entries()) {
+    // 添加分隔符
+    parts.push(encoder.encode(`--${boundary}\r\n`));
+    
+    if (value instanceof Blob) {
+      // 处理文件类型
+      parts.push(encoder.encode(
+        `Content-Disposition: form-data; name="${key}"; filename="audio.wav"\r\n` +
+        `Content-Type: ${value.type}\r\n\r\n`
+      ));
+      parts.push(new Uint8Array(await value.arrayBuffer()));
+    } else {
+      // 处理普通字段
+      parts.push(encoder.encode(
+        `Content-Disposition: form-data; name="${key}"\r\n\r\n${value}`
+      ));
+    }
+    parts.push(encoder.encode('\r\n'));
   }
-  reconnectTimer = setTimeout(() => {
-    initializeWebSocket(config);
-  }, 5000);
+  
+  // 添加结束分隔符
+  parts.push(encoder.encode(`--${boundary}--\r\n`));
+
+  // 合并所有部分
+  const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.length;
+  }
+
+  return Array.from(result);
 }
 
-export function closeWebSocket() {
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-  }
-  if (wsInstance) {
-    wsInstance.close();
-    wsInstance = null;
+export async function checkServerStatus(): Promise<boolean> {
+  try {
+    const serverUrl = await getServerUrl();
+    if (!serverUrl) {
+      return false;
+    }
+
+    logger.log(`Checking server status: ${serverUrl}/api/hello`, 'DEBUG', ModelName);
+    
+    const result = await invoke('check_server_status', {
+      url: `${serverUrl}/api/hello`
+    });
+    logger.log(`Server status check result: ${result}`, 'INFO', ModelName);
+    return Boolean(result);
+  } catch (error) {
+    logger.log(`Server status check failed: ${error}`, 'ERROR', ModelName);
+    return false;
   }
 }

@@ -7,6 +7,7 @@ mod commands;
 mod device_manager;
 mod servo_controller;
 mod logger;
+mod http_client;
 
 use crate::logger::setup_logging;
 use crate::device_manager::DeviceManager;
@@ -41,6 +42,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_logs,
             commands::clear_logs,
             commands::get_serial_ports,
+            commands::proxy_request,
+            commands::check_server_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

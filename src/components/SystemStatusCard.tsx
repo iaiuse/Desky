@@ -3,17 +3,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 interface SystemStatusProps {
-  networkStatus: string;
+  serverStatus: string;
   deviceStatus: string;
   deviceId: string;
-  ipAddress: string;
+  serverEndpoint: string;
 }
 
 export const SystemStatusCard: React.FC<SystemStatusProps> = ({
-  networkStatus,
+  serverStatus,
   deviceStatus,
   deviceId,
-  ipAddress
+  serverEndpoint
 }) => {
   return (
     <Card>
@@ -35,11 +35,11 @@ export const SystemStatusCard: React.FC<SystemStatusProps> = ({
           <Alert>
             <AlertTitle className="flex justify-between items-center">
               <span className="font-bold">Network</span>
-              <span className="text-sm">{ipAddress || 'N/A'}</span>
+              <span className="text-sm">{serverEndpoint || 'N/A'}</span>
             </AlertTitle>
             <AlertDescription className="flex justify-between items-center mt-1">
               <span>Status:</span>
-              <span>{networkStatus}</span>
+              <span>{serverStatus}</span>
             </AlertDescription>
           </Alert>
         </div>

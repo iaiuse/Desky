@@ -1,16 +1,12 @@
 use std::sync::Arc;
-use serde::Serialize;
+use once_cell::sync::Lazy;
+
 use crate::device_manager::DeviceManager;
+use crate::http_client::HttpClient;
 
+const MODEL_NAME: &str = "Commands";
 
-#[derive(Serialize)]
-pub struct CameraInfoDto {
-    pub index: u32,
-    pub name: String,
-    pub description: Option<String>,
-}
-
-// 定义允许跨线程访问的状态结构
+// Define a state structure that allows cross-thread access
 pub struct AppState {
     pub device_manager: Arc<DeviceManager>,
 }
@@ -18,6 +14,12 @@ pub struct AppState {
 // 实现 Send 和 Sync
 unsafe impl Send for AppState {}
 unsafe impl Sync for AppState {}
+
+// 使用 Lazy 静态变量来存储 HTTP 客户端实例
+static HTTP_CLIENT: Lazy<HttpClient> = Lazy::new(|| {
+    log_message("Creating HTTP client instance".to_string(), "INFO".to_string(), MODEL_NAME.to_string());
+    HttpClient::new()
+});
 
 #[tauri::command]
 pub async fn set_servo_position(
@@ -79,4 +81,55 @@ pub fn get_serial_ports() -> Result<Vec<String>, String> {
             Err(format!("Error listing serial ports: {}", e))
         }
     }
+}
+
+#[tauri::command]
+pub async fn proxy_request(
+    _window: tauri::Window,
+    target_url: String, 
+    method: String, 
+    body: Vec<u8>
+) -> Result<String, String> {
+    let function_name = "proxy_request";
+    log_message(
+        format!("[{}] Received request for URL: {}", function_name, target_url),
+        "INFO".to_string(),
+        MODEL_NAME.to_string(),
+    );
+    
+    // 直接使用传入的字节数组
+    HTTP_CLIENT.send_request(&target_url, &method, body).await
+        .map_err(|e| {
+            let error_msg = format!("[{}] Request failed: {}", function_name, e);
+            log_message(
+                error_msg.clone(),
+                "ERROR".to_string(),
+                MODEL_NAME.to_string(),
+            );
+            error_msg
+        })
+}
+
+#[tauri::command]
+pub async fn check_server_status(
+    url: String
+) -> Result<bool, String> {
+    let function_name = "check_server_status";
+    log_message(
+        format!("[{}] Checking server status: {}", function_name, url),
+        "INFO".to_string(),
+        MODEL_NAME.to_string(),
+    );
+    
+    // 将实现委托给 HTTP_CLIENT
+    HTTP_CLIENT.check_status(&url).await
+        .map_err(|e| {
+            let error_msg = format!("[{}] Status check failed: {}", function_name, e);
+            log_message(
+                error_msg.clone(),
+                "ERROR".to_string(),
+                MODEL_NAME.to_string(),
+            );
+            error_msg
+        })
 }

@@ -8,7 +8,7 @@ import VideoFeed from './VideoFeed';
 import { generateResponse } from '../lib/openai';
 import { generateSpeech } from '@/lib/tts';
 import { setServoPosition, initializeServo, ServoConfig, checkDeviceStatus } from '../lib/servoControl';
-import { initializeWebSocket, WebSocketConfig, sendMessage } from '../lib/webSocketService';
+import { sendMessage, checkServerStatus } from '../lib/webSocketService';
 import { FaceDetectionResult } from '../types/faceDetection';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db } from '../lib/db';
@@ -19,15 +19,22 @@ import { defaultVoices } from '../lib/voiceSettings';
 
 const ModelName = "InteractionInterface";
 
+interface ChatResponse {
+  response: string;
+  kaomoji: string;
+  servoX: number;
+  servoY: number;
+}
+
 export const InteractionInterface: React.FC = () => {
   const [prompt, setPrompt] = useState('');
-  const [response, setResponse] = useState('');
+  const [response, setResponse] = useState<ChatResponse | null>(null);
   const [deviceStatus, setDeviceStatus] = useState('Checking...');
-  const [wsStatus, setWsStatus] = useState('Checking...');
+  const [serverStatus, setServerStatus] = useState('Checking...');
   const [servoX, setServoX] = useState(90);
   const [servoY, setServoY] = useState(90);
   const [deviceName, setDeviceName] = useState('');
-  const [wsEndpoint, setWsEndpoint] = useState('');
+  const [serverEndpoint, setServerEndpoint] = useState('');
   const [servoConfig, setServoConfig] = useState<ServoConfig>({
     deviceName: 'Default Device'
   });
@@ -66,13 +73,17 @@ export const InteractionInterface: React.FC = () => {
       try {
         // 加载设置
         const deviceNameSetting = await db.settings.get('deviceName');
-        const wsEndpointSetting = await db.settings.get('wsEndpoint');
+        const endpointSetting = await db.settings.get('wsEndpoint');
         
         const deviceName = deviceNameSetting?.value || 'Not set';
-        const endpoint = wsEndpointSetting?.value || '';
+        const endpoint = endpointSetting?.value || '';
         
         setDeviceName(deviceName);
-        setWsEndpoint(endpoint);
+        setServerEndpoint(endpoint);
+
+        // 检查服务器状态
+        const serverCheck = await checkServerStatus();
+        setServerStatus(serverCheck ? 'Connected' : 'Offline');
         
         // 初始化舵机配置
         const servoConfig: ServoConfig = {
@@ -88,19 +99,9 @@ export const InteractionInterface: React.FC = () => {
           await initializeServo(servoConfig);
         }
 
-        // 初始化 WebSocket
-        if (endpoint) {
-          const wsConfig: WebSocketConfig = {
-            endpoint,
-            deviceName
-          };
-          await initializeWebSocket(wsConfig);
-          setWsStatus('Connected');
-        }
-
       } catch (error) {
         logger.log(`Error initializing component: ${error}`, 'ERROR', ModelName);
-        setWsStatus('Error');
+        setServerStatus('Error');
       }
     };
 
@@ -134,18 +135,6 @@ export const InteractionInterface: React.FC = () => {
     
     if (result.confidence > 0.7 && servoConfig) {
       setServoPosition({ x: servoX, y: servoY }, servoConfig);
-      
-      // 发送人脸检测数据到服务器
-      sendMessage({
-        type: 'FACE_DETECTION',
-        payload: {
-          deviceName,
-          servoX,
-          servoY,
-          confidence: result.confidence,
-          timestamp: Date.now()
-        }
-      });
     }
   };
 
@@ -154,22 +143,30 @@ export const InteractionInterface: React.FC = () => {
     if (!prompt.trim()) return;
 
     try {
-      const response = await generateResponse(prompt);
-      setResponse(response);
+      const result = await generateResponse(prompt);
+      setResponse(result);
       
-      const audioBuffer = await generateSpeech(response, selectedVoice);
+      const audioBuffer = await generateSpeech(result.response, selectedVoice);
       setAudioBuffer(audioBuffer);
 
-      // 发送聊天响应到服务器
-      sendMessage({
-        type: 'CHAT_RESPONSE',
-        payload: {
-          deviceName,
-          text: response,
-          audio: Array.from(new Uint8Array(audioBuffer)),
-          timestamp: Date.now()
-        }
+      // 使用统一的消息服务发送数据
+      await sendMessage({
+        text: result.response,
+        audioBuffer,
+        expression: result.kaomoji || 'neutral', // 可以根据实际情况设置表情
+        deviceName
       });
+
+      // Update servo position if available
+      if (result.servoX && result.servoY) {
+        await setServoPosition(result.servoX, result.servoY);
+      }
+
+      // Generate speech for the response text
+      if (result.response) {
+        await generateSpeech(result.response, selectedVoice);
+      }
+
     } catch (error) {
       logger.log(`Error in chat submission: ${error}`, 'ERROR', ModelName);
     }
@@ -206,7 +203,8 @@ export const InteractionInterface: React.FC = () => {
           {response && (
             <div className="mt-4">
               <h3 className="font-bold">Response:</h3>
-              <p>{response}</p>
+              <p>{response.response}</p>
+              <p>{response.kaomoji}</p>
             </div>
           )}
           {audioBuffer && <AudioPlayer audioBuffer={audioBuffer} />}
@@ -215,10 +213,10 @@ export const InteractionInterface: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <SystemStatusCard
-        networkStatus={wsStatus}
+        serverStatus={serverStatus}
         deviceStatus={deviceStatus}
         deviceId={deviceName}
-        ipAddress={wsEndpoint}
+        serverEndpoint={serverEndpoint}
       />
 
         <Card>
