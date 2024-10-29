@@ -6,10 +6,10 @@ export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
 
   const navItems = [
-    { name: 'Home', icon: Home, path: '/' },
-    { name: 'Settings', icon: Settings, path: '/settings' },
-    { name: 'Help', icon: HelpCircle, path: '/help' },
-    { name: 'Log', icon: ClipboardList, path: '/log' },
+    { name: '首页', icon: Home, path: '/' },
+    { name: '设置', icon: Settings, path: '/settings' },
+    { name: '帮助', icon: HelpCircle, path: '/help' },
+    { name: '日志', icon: ClipboardList, path: '/log' },
   ];
 
   return (

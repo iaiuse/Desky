@@ -18,27 +18,27 @@ export const SystemStatusCard: React.FC<SystemStatusProps> = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>System Status</CardTitle>
+        <CardTitle>系统状态</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
           <Alert>
             <AlertTitle className="flex justify-between items-center">
-              <span className="font-bold">Device</span>
-              <span className="text-sm">{deviceId || 'N/A'}</span>
+              <span className="font-bold">设备</span>
+              <span className="text-sm">{deviceId || '未设置'}</span>
             </AlertTitle>
             <AlertDescription className="flex justify-between items-center mt-1">
-              <span>Status:</span>
+              <span>状态:</span>
               <span>{deviceStatus}</span>
             </AlertDescription>
           </Alert>
           <Alert>
             <AlertTitle className="flex justify-between items-center">
-              <span className="font-bold">Network</span>
-              <span className="text-sm">{serverEndpoint || 'N/A'}</span>
+              <span className="font-bold">网络</span>
+              <span className="text-sm">{serverEndpoint || '未设置'}</span>
             </AlertTitle>
             <AlertDescription className="flex justify-between items-center mt-1">
-              <span>Status:</span>
+              <span>状态:</span>
               <span>{serverStatus}</span>
             </AlertDescription>
           </Alert>

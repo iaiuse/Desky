@@ -29,8 +29,8 @@ interface ChatResponse {
 export const InteractionInterface: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [response, setResponse] = useState<ChatResponse | null>(null);
-  const [deviceStatus, setDeviceStatus] = useState('Checking...');
-  const [serverStatus, setServerStatus] = useState('Checking...');
+  const [deviceStatus, setDeviceStatus] = useState('检查中...');
+  const [serverStatus, setServerStatus] = useState('检查中...');
   const [servoX, setServoX] = useState(90);
   const [servoY, setServoY] = useState(90);
   const [deviceName, setDeviceName] = useState('');
@@ -191,10 +191,10 @@ export const InteractionInterface: React.FC = () => {
     <div className="container mx-auto p-4 space-y-6">
       <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle>Robot Interaction</CardTitle>
+          <CardTitle>机器人交互</CardTitle>
           <Select value={selectedVoice} onValueChange={handleVoiceChange}>
             <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select voice" />
+              <SelectValue placeholder="选择语音" />
             </SelectTrigger>
             <SelectContent>
               {voices.map((voice) => (
@@ -210,14 +210,14 @@ export const InteractionInterface: React.FC = () => {
             <Textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Enter your prompt here..."
+              placeholder="在这里输入你想说的话..."
               className="mb-4"
             />
-            <Button type="submit">Send</Button>
+            <Button type="submit">发送</Button>
           </form>
           {response && (
             <div className="mt-4">
-              <h3 className="font-bold">Response:</h3>
+              <h3 className="font-bold">回复:</h3>
               <p>{response.response}</p>
               <p>{response.kaomoji}</p>
             </div>
@@ -236,12 +236,12 @@ export const InteractionInterface: React.FC = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Servo Control</CardTitle>
+            <CardTitle>舵机控制</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div>
-                <label className="block mb-2">Servo X: {servoX}°</label>
+                <label className="block mb-2">水平角度: {servoX}°</label>
                 <Slider
                   min={0}
                   max={180}
@@ -251,7 +251,7 @@ export const InteractionInterface: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block mb-2">Servo Y: {servoY}°</label>
+                <label className="block mb-2">垂直角度: {servoY}°</label>
                 <Slider
                   min={0}
                   max={180}

@@ -80,18 +80,18 @@ export const LogViewer: React.FC = () => {
 
   return (
     <div className="p-4">
-      <h2 className="text-xl font-bold mb-4">Application Logs</h2>
+      <h2 className="text-xl font-bold mb-4">应用日志</h2>
       <div className="flex flex-wrap gap-2 mb-4">
         <Input
           type="text"
-          placeholder="Search logs..."
+          placeholder="搜索日志..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full sm:w-64"
         />
         <Select onValueChange={setStartDate}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Start date" />
+            <SelectValue placeholder="开始日期" />
           </SelectTrigger>
           <SelectContent>
             {generateDateOptions()}
@@ -99,13 +99,13 @@ export const LogViewer: React.FC = () => {
         </Select>
         <Select onValueChange={setEndDate}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="End date" />
+            <SelectValue placeholder="结束日期" />
           </SelectTrigger>
           <SelectContent>
             {generateDateOptions()}
           </SelectContent>
         </Select>
-        <Button onClick={handleClearLogs} className="w-full sm:w-auto">Clear Logs</Button>
+        <Button onClick={handleClearLogs} className="w-full sm:w-auto">清除日志</Button>
       </div>
       <pre className="bg-gray-100 p-2 rounded h-64 overflow-auto">
         {filteredLogs.join('\n')}
