@@ -82,7 +82,7 @@ jobs:
 
     - name: 构建 Tauri 应用 (现代 macOS)
       if: matrix.target == 'macos-modern'
-      uses: tauri-apps/tauri-action@v1
+      uses: tauri-apps/tauri-action@v1.4.3
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -91,7 +91,7 @@ jobs:
 
     - name: 构建 Tauri 应用 (Big Sur)
       if: matrix.target == 'macos-bigsur'
-      uses: tauri-apps/tauri-action@v1
+      uses: tauri-apps/tauri-action@v1.4.3
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -110,7 +110,7 @@ jobs:
 
     - name: 构建 Tauri 应用 (Windows)
       if: matrix.target == 'windows'
-      uses: tauri-apps/tauri-action@v1
+      uses: tauri-apps/tauri-action@v1.4.3
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
