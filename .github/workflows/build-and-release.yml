@@ -20,7 +20,7 @@ jobs:
             target: windows
           - os: macos-latest
             target: macos-modern
-          - os: macos-11
+          - os: macos-latest
             target: macos-bigsur
 
     steps:
@@ -63,18 +63,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-build-
 
-    - name: 安装系统依赖项（Linux）
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          libgtk-3-dev \
-          libwebkit2gtk-4.0-dev \
-          libssl-dev \
-          libsoup2.4-dev \
-          libjavascriptcoregtk-4.0-dev
-
     - name: 安装 Rust
       uses: actions-rs/toolchain@v1
       with:
@@ -83,14 +71,18 @@ jobs:
         override: true
 
     - name: 安装 macOS 构建目标
-      if: matrix.os == 'macos-latest' || matrix.os == 'macos-11'
+      if: matrix.os == 'macos-latest'
       run: |
         rustup target add x86_64-apple-darwin
         rustup target add aarch64-apple-darwin
 
+    - name: 设置环境变量（针对 macOS Big Sur）
+      if: matrix.target == 'macos-bigsur'
+      run: echo "MACOSX_DEPLOYMENT_TARGET=10.13" >> $GITHUB_ENV
+
     - name: 构建 Tauri 应用 (现代 macOS)
       if: matrix.target == 'macos-modern'
-      uses: tauri-apps/tauri-action@v0
+      uses: tauri-apps/tauri-action@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -99,7 +91,7 @@ jobs:
 
     - name: 构建 Tauri 应用 (Big Sur)
       if: matrix.target == 'macos-bigsur'
-      uses: tauri-apps/tauri-action@v0
+      uses: tauri-apps/tauri-action@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -109,7 +101,7 @@ jobs:
             "tauri": {
               "bundle": {
                 "macOS": {
-                  "minimumSystemVersion": "10.15",
+                  "minimumSystemVersion": "10.13",
                   "targets": ["x86_64-apple-darwin"]
                 }
               }
@@ -118,14 +110,14 @@ jobs:
 
     - name: 构建 Tauri 应用 (Windows)
       if: matrix.target == 'windows'
-      uses: tauri-apps/tauri-action@v0
+      uses: tauri-apps/tauri-action@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: 上传构建产物
       uses: actions/upload-artifact@v3
       with:
-        name: ${{ matrix.os }}-build
+        name: ${{ matrix.target }}-build
         path: |
           src-tauri/target/release/bundle/**/*
           src-tauri/target/release/*.app.zip
@@ -152,4 +144,27 @@ jobs:
       id: package-version
       shell: bash
       run: |
-        version=$(pnpm pkg get version | tr -d 
+        version=$(pnpm pkg get version | tr -d '"')
+        echo "Version: $version"
+        echo "version=$version" >> $GITHUB_OUTPUT
+
+    - name: 下载所有构建产物
+      uses: actions/download-artifact@v3
+      with:
+        path: artifacts
+
+    - name: 列出下载的构建产物
+      shell: bash
+      run: |
+        ls -R artifacts/
+
+    - name: 发布到 GitHub Releases
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.package-version.outputs.version }}
+        name: 发布 v${{ steps.package-version.outputs.version }}
+        files: artifacts/**/*.*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
