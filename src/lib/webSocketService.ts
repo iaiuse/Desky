@@ -10,6 +10,7 @@ export interface MessagePayload {
   audioBuffer: ArrayBuffer;
   expression: string;
   deviceName: string;
+  phoneSerialNumber: string;
 }
 
 // Get server URL from settings
@@ -45,6 +46,8 @@ export async function sendMessage(message: any): Promise<void> {
     
     // 添加表情数据（必需字段）
     formData.append('expression', message.expression || 'neutral');
+    // 添加设备ID（必需字段）
+    formData.append('deviceId', message.phoneSerialNumber);
 
     // 将 FormData 转换为字节数组
     const formDataArray = await formDataToBytes(formData);

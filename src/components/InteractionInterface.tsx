@@ -26,6 +26,14 @@ interface ChatResponse {
   servoY: number;
 }
 
+export interface MessagePayload {
+  text: string;
+  audioBuffer: ArrayBuffer;
+  expression: string;
+  deviceName: string;
+  phoneSerialNumber: string;
+}
+
 export const InteractionInterface: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [response, setResponse] = useState<ChatResponse | null>(null);
@@ -34,6 +42,7 @@ export const InteractionInterface: React.FC = () => {
   const [servoX, setServoX] = useState(90);
   const [servoY, setServoY] = useState(90);
   const [deviceName, setDeviceName] = useState('');
+  const [phoneSerialNumber, setPhoneSerialNumber] = useState('');
   const [serverEndpoint, setServerEndpoint] = useState('');
   const [servoConfig, setServoConfig] = useState<ServoConfig>({
     deviceName: 'Default Device'
@@ -74,12 +83,15 @@ export const InteractionInterface: React.FC = () => {
         // 加载设置
         const deviceNameSetting = await db.settings.get('deviceName');
         const endpointSetting = await db.settings.get('wsEndpoint');
+        const phoneSerialSetting = await db.settings.get('phoneSerialNumber');
         
         const deviceName = deviceNameSetting?.value || 'Not set';
         const endpoint = endpointSetting?.value || '';
+        const phoneSerial = phoneSerialSetting?.value || '';
         
         setDeviceName(deviceName);
         setServerEndpoint(endpoint);
+        setPhoneSerialNumber(phoneSerial);
 
         // 检查服务器状态
         const serverCheck = await checkServerStatus();
@@ -165,7 +177,8 @@ export const InteractionInterface: React.FC = () => {
         text: result.response,
         audio: audioBuffer,
         expression: result.kaomoji ||'neutral',
-        deviceName
+        deviceName,
+        phoneSerialNumber
       });
       logger.log('Message sent to server successfully', 'INFO', ModelName);
 

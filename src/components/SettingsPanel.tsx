@@ -24,6 +24,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     tts_baseUrl: '',
     tts_apiKey: '',
     tts_modelName: '',
+    phoneSerialNumber: '',
   });
 
   const { ports, loading, error } = useSerialPorts();
@@ -148,13 +149,22 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
                     onChange={(e) => handleChange('deviceName', e.target.value)}
                   />
                 </div>
+                
                 <div>
-                <label className="block mb-1">WebSocket 服务地址</label>
-                <Input
-                  value={settings.wsEndpoint}
-                  onChange={(e) => handleChange('wsEndpoint', e.target.value)}
-                />
-              </div>
+                  <label className="block mb-1">WebSocket 服务地址</label>
+                  <Input
+                    value={settings.wsEndpoint}
+                    onChange={(e) => handleChange('wsEndpoint', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">手机串号</label>
+                  <Input
+                    value={settings.phoneSerialNumber}
+                    onChange={(e) => handleChange('phoneSerialNumber', e.target.value)}
+                    placeholder="请输入手机唯一标识符，在手机屏幕连续单机3下获取"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
