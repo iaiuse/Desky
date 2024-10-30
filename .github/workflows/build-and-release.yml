@@ -79,7 +79,6 @@ jobs:
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-        target: x86_64-apple-darwin
         profile: minimal
         override: true
 
@@ -133,11 +132,8 @@ jobs:
 
   release:
     needs: build
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest]
 
     steps:
     - uses: actions/checkout@v3
@@ -156,32 +152,4 @@ jobs:
       id: package-version
       shell: bash
       run: |
-        version=$(pnpm pkg get version | tr -d '"')
-        echo "Version: $version"
-        echo "version=$version" >> $GITHUB_OUTPUT
-
-    - name: 下载构建产物
-      uses: actions/download-artifact@v3
-      with:
-        name: ${{ matrix.os }}-build
-        path: ${{ matrix.os }}-build
-
-    - name: 列出下载的构建产物
-      shell: bash
-      run: |
-        ls -R ${{ matrix.os }}-build/
-
-    - name: 发布到 GitHub Releases
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: v${{ steps.package-version.outputs.version }}
-        name: 发布 v${{ steps.package-version.outputs.version }}
-        files: |
-          ${{ matrix.os == 'macos-latest' && 'macos-latest-build/**/*.dmg' || '' }}
-          ${{ matrix.os == 'windows-latest' && 'windows-latest-build/**/*.msi' || '' }}
-          ${{ matrix.os == 'windows-latest' && 'windows-latest-build/**/*.exe' || '' }}
-          ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-latest-build/**/*.AppImage' || '' }}
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        version=$(pnpm pkg get version | tr -d 
