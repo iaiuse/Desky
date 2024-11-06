@@ -7,6 +7,14 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db } from '../lib/db';
 import { useSerialPorts } from '../hooks/useSerialPorts';
+import { RefreshCw } from 'lucide-react';
+import { invoke } from '@tauri-apps/api';
+
+interface Device {
+  deviceId: string;
+  screenSize: string;
+  lastSeen: number;
+}
 
 interface SettingsPanelProps {
   setIsConfigured?: (value: boolean) => void;
@@ -27,6 +35,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     phoneSerialNumber: '',
   });
 
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
+
   const { ports, loading, error } = useSerialPorts();
 
   useEffect(() => {
@@ -42,6 +54,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     loadSettings();
   }, []);
 
+
+  useEffect(() => {
+    if (settings.wsEndpoint) {
+      handleRefreshDevices();
+    }
+  }, [settings.wsEndpoint]);
+
   const handleChange = (key: keyof typeof settings, value: string) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
@@ -50,7 +69,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     setSettings(prev => ({
       ...prev,
       serialPort: value,
-      deviceName: value // Extract the last part of the path as device name
+      deviceName: value
     }));
   };
 
@@ -67,6 +86,55 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
       setIsConfigured(true);
     }
     alert('设置已保存');
+  };
+
+  async function refreshPorts(): Promise<void> {
+    try {
+      // Call Rust's get_serial_ports command
+      const portsResult = await invoke('get_serial_ports');
+      // Update the ports state through the useSerialPorts hook
+      if (Array.isArray(portsResult)) {
+        // The ports will automatically update through the useSerialPorts hook
+        // No need to manually clear/update the dropdown since it's handled by the hook
+      }
+    } catch (error) {
+      console.error('Failed to refresh ports:', error);
+    }
+  }
+
+  const handleRefreshDevices = async () => {
+    console.log('开始刷新设备列表...');
+    setLoadingDevices(true);
+    setDeviceError(null);
+    try {
+      const requestConfig = {
+        targetUrl: `${settings.wsEndpoint}/api/device/list`,
+        method: 'GET',
+        body: [] as number[]
+      };
+      
+      console.log('发送请求配置:', requestConfig);
+      
+      const response = await invoke('proxy_request', requestConfig);
+      console.log('收到原始响应:', response);
+      
+      const data = JSON.parse(response as string);
+      console.log('解析后的数据:', data);
+      
+      if (data.success) {
+        console.log('成功获取设备列表:', data.devices);
+        setDevices(data.devices);
+      } else {
+        console.error('API返回错误:', data.error);
+        setDeviceError(data.error || '获取设备列表失败');
+      }
+    } catch (err) {
+      console.error('请求过程出错:', err);
+      setDeviceError('获取设备列表失败');
+    } finally {
+      console.log('设备列表刷新完成');
+      setLoadingDevices(false);
+    }
   };
 
   return (
@@ -122,7 +190,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
             <CardContent>
               <div className="space-y-4">
                 <div>
-                  <label className="block mb-1">串口</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block">串口</label>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => refreshPorts()}
+                      disabled={loading}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <Select
                     value={settings.serialPort}
                     onValueChange={handleSerialPortChange}
@@ -158,12 +236,42 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
                   />
                 </div>
                 <div>
-                  <label className="block mb-1">手机串号</label>
-                  <Input
-                    value={settings.phoneSerialNumber}
-                    onChange={(e) => handleChange('phoneSerialNumber', e.target.value)}
-                    placeholder="请输入手机唯一标识符，在手机屏幕连续单机3下获取"
-                  />
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block">手机设备</label>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleRefreshDevices}
+                      disabled={loadingDevices}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Select
+                      value={settings.phoneSerialNumber}
+                      onValueChange={(value) => handleChange('phoneSerialNumber', value)}
+                      disabled={loadingDevices}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择设备" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {loadingDevices && <SelectItem value="loading">加载中...</SelectItem>}
+                        {deviceError && <SelectItem value="error">错误: {deviceError}</SelectItem>}
+                        {devices.map((device) => (
+                          <SelectItem key={device.deviceId} value={device.deviceId}>
+                            {device.deviceId} ({device.screenSize})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      value={settings.phoneSerialNumber}
+                      onChange={(e) => handleChange('phoneSerialNumber', e.target.value)}
+                      placeholder="或手动输入设备串号"
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>
