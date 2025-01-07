@@ -1,5 +1,13 @@
 import { db } from './db';
 
+export interface CustomVoice {
+  id: string;
+  name: string;
+  isCustom: boolean;
+  originalVoiceId: string;
+  modelPath?: string;
+}
+
 export const defaultVoices = [
   { id: "male-qn-qingse", name: "青涩青年音色" },
   { id: "male-qn-jingying", name: "精英青年音色" },
@@ -67,5 +75,36 @@ export async function updateVoiceSettings(voices: Array<{ id: string, name: stri
     console.log('Voice settings updated successfully');
   } catch (error) {
     console.error('Error updating voice settings:', error);
+  }
+}
+
+export async function addCustomVoice(customVoice: CustomVoice) {
+  try {
+    const existingVoices = await db.settings.get('voices');
+    const currentVoices = existingVoices?.value || defaultVoices;
+    
+    const uniqueId = `custom-${Date.now()}-${customVoice.id}`;
+    customVoice.id = uniqueId;
+    
+    const updatedVoices = [...currentVoices, customVoice];
+    await db.settings.put({ key: 'voices', value: updatedVoices });
+    
+    return uniqueId;
+  } catch (error) {
+    console.error('Error adding custom voice:', error);
+    throw error;
+  }
+}
+
+export async function removeCustomVoice(voiceId: string) {
+  try {
+    const existingVoices = await db.settings.get('voices');
+    const currentVoices = existingVoices?.value || defaultVoices;
+    
+    const updatedVoices = currentVoices.filter((voice: { id: string; }) => voice.id !== voiceId);
+    await db.settings.put({ key: 'voices', value: updatedVoices });
+  } catch (error) {
+    console.error('Error removing custom voice:', error);
+    throw error;
   }
 }

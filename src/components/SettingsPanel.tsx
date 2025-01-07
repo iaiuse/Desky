@@ -32,6 +32,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     tts_baseUrl: '',
     tts_apiKey: '',
     tts_modelName: '',
+    tts_groupId: '',
     phoneSerialNumber: '',
   });
 
@@ -302,6 +303,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
                   <Input
                     value={settings.tts_modelName}
                     onChange={(e) => handleChange('tts_modelName', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">TTS Group ID</label>
+                  <Input
+                    value={settings.tts_groupId}
+                    onChange={(e) => handleChange('tts_groupId', e.target.value)}
                   />
                 </div>
               </div>

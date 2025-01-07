@@ -15,7 +15,8 @@ import { db } from '../lib/db';
 import { logger } from '../utils/logger';
 import { SystemStatusCard } from './SystemStatusCard';
 import AudioPlayer from './AudioPlayer';
-import { defaultVoices } from '../lib/voiceSettings';
+import { addCustomVoice, CustomVoice, defaultVoices, removeCustomVoice } from '../lib/voiceSettings';
+import { VoiceCloneDialog } from './VoiceCloneDialog';
 
 const ModelName = "InteractionInterface";
 
@@ -50,7 +51,7 @@ export const InteractionInterface: React.FC = () => {
   const [audioBuffer, setAudioBuffer] = useState<ArrayBuffer | null>(null);
   const [voices, setVoices] = useState<Array<{ id: string, name: string }>>(defaultVoices);
   const [selectedVoice, setSelectedVoice] = useState<string>(defaultVoices[0].id);
-
+  const [isVoiceCloningOpen, setIsVoiceCloningOpen] = useState(false);
 
   useEffect(() => {
     const loadVoices = async () => {
@@ -200,23 +201,83 @@ export const InteractionInterface: React.FC = () => {
     }
   };
 
+  
+
+  // 删除自定义语音
+  const handleRemoveCustomVoice = async (voiceId: string) => {
+    try {
+      await removeCustomVoice(voiceId);
+      const voicesSetting = await db.settings.get('voices');
+      if (voicesSetting) {
+        setVoices(voicesSetting.value);
+      }
+    } catch (error) {
+      logger.log(`Error removing custom voice: ${error}`, 'ERROR', ModelName);
+    }
+  };
+
+  const handleVoiceCloned = async (voiceId: string, name: string) => {
+    try {
+      const customVoice: CustomVoice = {
+        id: voiceId,
+        name: name,
+        isCustom: true,
+        originalVoiceId: voiceId
+      };
+
+      await addCustomVoice(customVoice);
+      
+      // 重新加载语音列表
+      const voicesSetting = await db.settings.get('voices');
+      if (voicesSetting) {
+        setVoices(voicesSetting.value);
+      }
+    } catch (error) {
+      logger.log(`Error adding cloned voice: ${error}`, 'ERROR', ModelName);
+    }
+  };
+
   return (
     <div className="container mx-auto p-4 space-y-6">
       <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle>机器人交互</CardTitle>
-          <Select value={selectedVoice} onValueChange={handleVoiceChange}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="选择语音" />
-            </SelectTrigger>
-            <SelectContent>
-              {voices.map((voice) => (
-                <SelectItem key={voice.id} value={voice.id}>
-                  {voice.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setIsVoiceCloningOpen(true)}>
+              复刻新语音
+            </Button>
+            <VoiceCloneDialog
+              open={isVoiceCloningOpen}
+              onOpenChange={setIsVoiceCloningOpen}
+              onVoiceCloned={handleVoiceCloned}
+            />
+            <Select value={selectedVoice} onValueChange={handleVoiceChange}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="选择语音" />
+              </SelectTrigger>
+              <SelectContent>
+                {voices.map((voice) => (
+                  <div key={voice.id} className="flex items-center justify-between">
+                    <SelectItem value={voice.id}>
+                      {voice.name}
+                    </SelectItem>
+                    {'isCustom' in voice && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveCustomVoice(voice.id);
+                        }}
+                      >
+                        删除
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
