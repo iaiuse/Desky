@@ -36,10 +36,10 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 800,
+        "height": 900,
         "resizable": true,
-        "title": "desky",
-        "width": 1200,
+        "title": "SmartBot-X: 智能生活新定义",
+        "width": 1440,
         "minHeight": 600,
         "minWidth": 800,
         "transparent": true,

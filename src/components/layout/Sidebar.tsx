@@ -14,7 +14,7 @@ export const Sidebar: React.FC = () => {
 
   return (
     <div className="w-64 bg-gray-800 text-white p-4 h-screen">
-      <h1 className="text-2xl font-bold mb-8">Desky</h1>
+      <h1 className="text-2xl font-bold mb-8">SmartBot-X</h1>
       <nav>
         <ul>
           {navItems.map((item) => (

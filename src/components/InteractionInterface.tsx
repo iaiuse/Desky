@@ -253,7 +253,7 @@ export const InteractionInterface: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto p-4 space-y-6">
+    <div className="container max-w-[1100px] mx-auto p-6 space-y-8">
       <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle>机器人交互</CardTitle>
