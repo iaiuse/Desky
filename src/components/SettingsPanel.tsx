@@ -34,6 +34,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     tts_modelName: '',
     tts_groupId: '',
     phoneSerialNumber: '',
+    bytedance_tts_baseUrl: '',
+    bytedance_tts_appId: '',
+    bytedance_tts_token: '',
+    bytedance_tts_cluster: '',
   });
 
   const [devices, setDevices] = useState<Device[]>([]);
@@ -146,6 +150,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
           <TabsTrigger value="api">API设置</TabsTrigger>
           <TabsTrigger value="device">设备设置</TabsTrigger>
           <TabsTrigger value="tts">TTS设置</TabsTrigger>
+          <TabsTrigger value="bytedance_tts">ByteDance TTS设置</TabsTrigger>
         </TabsList>
         <TabsContent value="api">
           <Card>
@@ -310,6 +315,44 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
                   <Input
                     value={settings.tts_groupId}
                     onChange={(e) => handleChange('tts_groupId', e.target.value)}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="bytedance_tts">
+          <Card>
+            <CardHeader>ByteDance TTS设置</CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <label className="block mb-1">Base URL</label>
+                  <Input
+                    value={settings.bytedance_tts_baseUrl}
+                    onChange={(e) => handleChange('bytedance_tts_baseUrl', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">App ID</label>
+                  <Input
+                    type="password"
+                    value={settings.bytedance_tts_appId}
+                    onChange={(e) => handleChange('bytedance_tts_appId', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">Token</label>
+                  <Input
+                    value={settings.bytedance_tts_token}
+                    onChange={(e) => handleChange('bytedance_tts_token', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">Cluster</label>
+                  <Input
+                    value={settings.bytedance_tts_cluster}
+                    onChange={(e) => handleChange('bytedance_tts_cluster', e.target.value)}
                   />
                 </div>
               </div>

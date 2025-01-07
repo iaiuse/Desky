@@ -212,16 +212,30 @@ export async function generateSpeech(text: string, voiceId: string): Promise<Arr
     logger.log(`Generating speech for text: ${text}`, 'INFO', ModelName);
     const settings = await getTTSSettings();
 
-    const response = await fetch(`${settings.baseUrl}/text_to_speech`, {
+    //logger.log(`TTS Settings: ${JSON.stringify(settings)}`, 'INFO', ModelName);
+
+    const response = await fetch(`${settings.baseUrl}/v1/t2a_v2`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${settings.apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        model: settings.model,
         text: text,
-        voice_id: voiceId,
-        model: settings.model
+        stream: false,
+        voice_setting: {
+          voice_id: voiceId || "male-qn-qingse",
+          speed: 1,
+          vol: 1,
+          pitch: 0
+        },
+        audio_setting: {
+          sample_rate: 32000,
+          bitrate: 128000,
+          format: "mp3",
+          channel: 1
+        }
       }),
     });
 
@@ -230,20 +244,25 @@ export async function generateSpeech(text: string, voiceId: string): Promise<Arr
     }
 
     const result = await response.json();
-    
-    if (result.base_resp?.status_code === 0) {
-      // 解码 base64 音频数据
-      const audioData = atob(result.audio);
-      const audioArray = new Uint8Array(audioData.length);
-      for (let i = 0; i < audioData.length; i++) {
-        audioArray[i] = audioData.charCodeAt(i);
-      }
-      return audioArray.buffer;
-    } else {
-      throw new Error(result.base_resp?.status_msg || 'Unknown error');
+    logger.log(`API Response received`, 'INFO', ModelName);
+    logger.log(`Speech generated successfully`, 'INFO', ModelName);
+
+    // API returns audio data as a hex string
+    const audioHex = result.data.audio;
+    logger.log(`Audio data received (first 100 chars): ${audioHex.substring(0, 100)}`, 'INFO', ModelName);
+
+    // Convert hex string to ArrayBuffer
+    const audioBuffer = new ArrayBuffer(audioHex.length / 2);
+    const view = new Uint8Array(audioBuffer);
+    for (let i = 0; i < audioHex.length; i += 2) {
+      view[i / 2] = parseInt(audioHex.substr(i, 2), 16);
     }
+    
+    logger.log(`Speech buffer created, size: ${audioBuffer.byteLength} bytes`, 'INFO', ModelName);
+    return audioBuffer;
   } catch (error) {
     logger.log(`Error generating speech: ${error}`, 'ERROR', ModelName);
+    console.error('Error generating speech:', error);
     throw error;
   }
 }

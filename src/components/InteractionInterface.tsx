@@ -17,6 +17,16 @@ import { SystemStatusCard } from './SystemStatusCard';
 import AudioPlayer from './AudioPlayer';
 import { addCustomVoice, CustomVoice, defaultVoices, removeCustomVoice } from '../lib/voiceSettings';
 import { VoiceCloneDialog } from './VoiceCloneDialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const ModelName = "InteractionInterface";
 
@@ -52,6 +62,7 @@ export const InteractionInterface: React.FC = () => {
   const [voices, setVoices] = useState<Array<{ id: string, name: string }>>(defaultVoices);
   const [selectedVoice, setSelectedVoice] = useState<string>(defaultVoices[0].id);
   const [isVoiceCloningOpen, setIsVoiceCloningOpen] = useState(false);
+  const [voiceToDelete, setVoiceToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const loadVoices = async () => {
@@ -211,9 +222,11 @@ export const InteractionInterface: React.FC = () => {
       if (voicesSetting) {
         setVoices(voicesSetting.value);
       }
+      logger.log(`Custom voice ${voiceId} removed successfully`, 'INFO', ModelName);
     } catch (error) {
       logger.log(`Error removing custom voice: ${error}`, 'ERROR', ModelName);
     }
+    setVoiceToDelete(null);
   };
 
   const handleVoiceCloned = async (voiceId: string, name: string) => {
@@ -231,6 +244,8 @@ export const InteractionInterface: React.FC = () => {
       const voicesSetting = await db.settings.get('voices');
       if (voicesSetting) {
         setVoices(voicesSetting.value);
+        // 自动选择新创建的语音
+        setSelectedVoice(voiceId);
       }
     } catch (error) {
       logger.log(`Error adding cloned voice: ${error}`, 'ERROR', ModelName);
@@ -267,7 +282,7 @@ export const InteractionInterface: React.FC = () => {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRemoveCustomVoice(voice.id);
+                          setVoiceToDelete(voice.id);
                         }}
                       >
                         删除
@@ -342,14 +357,37 @@ export const InteractionInterface: React.FC = () => {
       <VideoFeed 
         onFaceDetected={handleFaceDetected}
         debug={true}
-        currentServoX={servoX}  // 使用已有的 servoX 状态
-        currentServoY={servoY}  // 使用已有的 servoY 状态
+        currentServoX={servoX}
+        currentServoY={servoY}
       />
 
       <DebugPanel
         onServoControl={handleServoControl}
         servoConfig={servoConfig}
       />
+
+      <AlertDialog open={!!voiceToDelete} onOpenChange={() => setVoiceToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除这个自定义语音吗？此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (voiceToDelete) {
+                  handleRemoveCustomVoice(voiceToDelete);
+                }
+              }}
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
