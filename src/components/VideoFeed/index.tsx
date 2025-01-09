@@ -15,15 +15,19 @@ interface VideoFeedProps {
   debug?: boolean;
   currentServoX?: number;
   currentServoY?: number;
+  isLocked?: boolean;
+  onLockChange?: (locked: boolean) => void;
 }
 
-const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false, currentServoX = 90, currentServoY = 90 }) => {
+const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false, currentServoX = 90, currentServoY = 90, isLocked = true, onLockChange }) => {
   const [currentResult, setCurrentResult] = useState<FaceDetectionResult | null>(null);
 
   const handleFaceDetected = useCallback((result: FaceDetectionResult, size: { width: number, height: number }) => {
     setCurrentResult(result);
-    onFaceDetected(result, size);
-  }, [onFaceDetected]);
+    if (!isLocked) {
+      onFaceDetected(result, size);
+    }
+  }, [onFaceDetected, isLocked]);
 
   const {
     isCameraActive,
@@ -78,19 +82,22 @@ const VideoFeed: React.FC<VideoFeedProps> = ({ onFaceDetected, debug = false, cu
           onCameraSelect={handleCameraSelect}
           onToggleCamera={toggleCamera}
           onRefresh={fetchCameras}
+          isLocked={isLocked}
+          onLockChange={onLockChange}
         />
 
-<VideoDisplay
-  videoRef={videoRef}
-  canvasRef={canvasRef}
-  isActive={isCameraActive}
-  isLoading={isLoading}
-  hasCameras={cameras.length > 0}
-  currentResult={currentResult}
-  currentServoX={currentServoX} // 从props传入
-  currentServoY={currentServoY} // 从props传入
-  debug={debug}
-/>
+        <VideoDisplay
+          videoRef={videoRef}
+          canvasRef={canvasRef}
+          isActive={isCameraActive}
+          isLoading={isLoading}
+          hasCameras={cameras.length > 0}
+          currentResult={currentResult}
+          currentServoX={currentServoX}
+          currentServoY={currentServoY}
+          debug={debug}
+          isLocked={isLocked}
+        />
 
         {debug && streamInfo && (
           <div className="mt-2 text-sm text-gray-500">

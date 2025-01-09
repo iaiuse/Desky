@@ -13,6 +13,8 @@ interface CameraControlsProps {
   onCameraSelect: (deviceId: string) => void;
   onToggleCamera: (active: boolean) => void;
   onRefresh: () => void;
+  isLocked: boolean;
+  onLockChange?: (locked: boolean) => void;
 }
 
 const CameraControls: React.FC<CameraControlsProps> = ({
@@ -22,7 +24,9 @@ const CameraControls: React.FC<CameraControlsProps> = ({
   isCameraActive,
   onCameraSelect,
   onToggleCamera,
-  onRefresh
+  onRefresh,
+  isLocked,
+  onLockChange
 }) => {
   return (
     <div className="mb-4 flex items-center justify-between flex-wrap gap-4">
@@ -43,6 +47,17 @@ const CameraControls: React.FC<CameraControlsProps> = ({
           />
           <span className="text-sm font-medium">
             {isCameraActive ? '关闭摄像头' : '开启摄像头'}
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Switch
+            checked={isLocked}
+            onCheckedChange={onLockChange}
+            disabled={!isCameraActive}
+          />
+          <span className="text-sm font-medium">
+            {isLocked ? '锁定位置' : '跟踪模式'}
           </span>
         </div>
       </div>

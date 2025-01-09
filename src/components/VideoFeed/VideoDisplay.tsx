@@ -13,6 +13,7 @@ interface VideoDisplayProps {
   // 添加舵机位置的状态
   currentServoX?: number;
   currentServoY?: number;
+  isLocked: boolean;
 }
 
 const VideoDisplay: React.FC<VideoDisplayProps> = ({
@@ -24,7 +25,8 @@ const VideoDisplay: React.FC<VideoDisplayProps> = ({
   currentResult,
   currentServoX = 90,
   currentServoY = 90,
-  debug = false
+  debug = false,
+  isLocked
 }) => {
   const drawRef = useRef<number>();
   const lastDrawnPosition = useRef<{x: number, y: number} | null>(null);
@@ -89,7 +91,7 @@ const VideoDisplay: React.FC<VideoDisplayProps> = ({
         const statusText = [
           `Servo X: ${currentServoX.toFixed(1)}°`,
           `Servo Y: ${currentServoY.toFixed(1)}°`,
-          `Status: ${detectionActive ? 'Tracking' : 'Searching'}`,
+          `Status: ${isLocked ? 'Locked' : (detectionActive ? 'Tracking' : 'Searching')}`,
           ...(detectionActive && currentResult ? [
             `Confidence: ${(currentResult.confidence * 100).toFixed(1)}%`,
             `Size: ${currentResult.size.width.toFixed(0)}x${currentResult.size.height.toFixed(0)}`
@@ -164,7 +166,7 @@ const VideoDisplay: React.FC<VideoDisplayProps> = ({
         cancelAnimationFrame(drawRef.current);
       }
     };
-  }, [canvasRef, currentResult, isActive, debug, currentServoX, currentServoY]);
+  }, [canvasRef, currentResult, isActive, debug, currentServoX, currentServoY, isLocked]);
 
   return (
     <div className="relative w-full h-[360px] bg-gray-900 rounded-lg overflow-hidden">
