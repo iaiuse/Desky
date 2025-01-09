@@ -12,7 +12,6 @@ mod http_client;
 use crate::logger::setup_logging;
 use crate::device_manager::DeviceManager;
 use std::sync::Arc;
-use tauri::Manager;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,11 +24,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tauri::Builder::default()
         .manage(app_state)
-        .setup(|app| {
+        .setup(|_app| {
             setup_logging().expect("Failed to setup logging");
             #[cfg(debug_assertions)]
             {
-                let window = app.get_window("main").unwrap();
+                let window = _app.get_window("main").unwrap();
                 window.open_devtools();
             }
             Ok(())
