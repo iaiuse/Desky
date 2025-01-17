@@ -4,7 +4,9 @@ export interface CustomVoice {
   id: string;
   name: string;
   isCustom: boolean;
+  provider: 'bytedance' | 'minimax';
   originalVoiceId: string;
+  speakerId?: string;
   modelPath?: string;
 }
 
@@ -83,7 +85,8 @@ export async function addCustomVoice(customVoice: CustomVoice) {
     const existingVoices = await db.settings.get('voices');
     const currentVoices = existingVoices?.value || defaultVoices;
     
-    const uniqueId = `custom-${Date.now()}-${customVoice.id}`;
+    const prefix = customVoice.provider === 'bytedance' ? 'bd' : 'mx';
+    const uniqueId = `${prefix}-${Date.now()}-${customVoice.originalVoiceId}`;
     customVoice.id = uniqueId;
     
     const updatedVoices = [...currentVoices, customVoice];

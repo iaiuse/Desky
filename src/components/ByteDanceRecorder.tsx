@@ -32,7 +32,6 @@ export function ByteDanceRecorder({ onVoiceCloned }: ByteDanceRecorderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentVoiceId, setCurrentVoiceId] = useState<string | null>(null);
   const [trainingStatus, setTrainingStatus] = useState<VoiceStatusResponse | null>(null);
-  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [availableVoices, setAvailableVoices] = useState<VoiceInfo[]>([]);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
@@ -91,7 +90,6 @@ export function ByteDanceRecorder({ onVoiceCloned }: ByteDanceRecorderProps) {
       }
 
       try {
-        setIsCheckingStatus(true);
         const status = await checkVoiceStatus(currentVoiceId);
         setTrainingStatus(status);
 
@@ -100,8 +98,6 @@ export function ByteDanceRecorder({ onVoiceCloned }: ByteDanceRecorderProps) {
         }
       } catch (error) {
         logger.log(`Failed to check voice status: ${error}`, 'ERROR', ModelName);
-      } finally {
-        setIsCheckingStatus(false);
       }
     };
 

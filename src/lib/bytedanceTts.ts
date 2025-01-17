@@ -25,11 +25,16 @@ interface TTSRequest {
     voice_type: string;
     encoding: string;
     speed_ratio: number;
+    volume_ratio: number;
+    pitch_ratio: number;
   };
   request: {
     reqid: string;
     text: string;
+    text_type: string;
     operation: string;
+    with_frontend: number;
+    frontend_type: string;
   };
 }
 
@@ -66,20 +71,18 @@ async function getTTSSettings(): Promise<TTSSettings> {
   }
 
   return {
-    baseUrl: baseUrl.value,
+    baseUrl: baseUrl.value || 'https://openspeech.bytedance.com',
     appId: appId.value,
     token: token.value,
     cluster: cluster.value
   };
 }
 
-export async function generateSpeech(text: string, voiceId: string): Promise<ArrayBuffer> {
+export async function generateBytedanceSpeech(text: string, voiceId: string): Promise<ArrayBuffer> {
   try {
-    logger.log(`Generating speech for text: ${text}`, 'INFO', ModelName);
+    logger.log(`Generating ByteDance speech for text: ${text}`, 'INFO', ModelName);
     const settings = await getTTSSettings();
 
-    const reqId = nanoid();
-    
     const requestBody: TTSRequest = {
       app: {
         appid: settings.appId,
@@ -87,27 +90,36 @@ export async function generateSpeech(text: string, voiceId: string): Promise<Arr
         cluster: settings.cluster
       },
       user: {
-        uid: reqId
+        uid: nanoid()  // 生成唯一ID
       },
       audio: {
         voice_type: voiceId,
         encoding: 'mp3',
-        speed_ratio: 1.0
+        speed_ratio: 1.0,
+        volume_ratio: 1.0,
+        pitch_ratio: 1.0
       },
       request: {
-        reqid: reqId,
+        reqid: nanoid(),
         text: text,
-        operation: 'query'
+        text_type: 'plain',
+        operation: 'query',
+        with_frontend: 1,
+        frontend_type: 'unitTson'
       }
     };
 
-    const response = await invoke<string>('proxy_request', {
+    const response = await invoke<string>('proxy_request_with_headers', {
       targetUrl: `${settings.baseUrl}/api/v1/tts`,
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer;${settings.token}`,
+        'Content-Type': 'application/json'
+      },
       body: Array.from(new TextEncoder().encode(JSON.stringify(requestBody)))
     });
 
-    const result: TTSResponse = JSON.parse(response);
+    const result = JSON.parse(response);
     
     if (result.code !== 3000) {
       throw new Error(`TTS error: ${result.message}`);
@@ -120,11 +132,11 @@ export async function generateSpeech(text: string, voiceId: string): Promise<Arr
       bytes[i] = binaryString.charCodeAt(i);
     }
     
-    logger.log(`Speech generated successfully, duration: ${result.addition.duration}ms`, 'INFO', ModelName);
+    logger.log(`Speech generated successfully`, 'INFO', ModelName);
     return bytes.buffer;
 
   } catch (error) {
-    logger.log(`Error generating speech: ${error}`, 'ERROR', ModelName);
+    logger.log(`Error generating ByteDance speech: ${error}`, 'ERROR', ModelName);
     throw error;
   }
 }

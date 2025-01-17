@@ -39,7 +39,7 @@ export async function generateResponse(prompt: string) {
     logger.log(`Using model: ${modelName?.value || "gpt-3.5-turbo-0125"}`, 'INFO', ModelName);
     logger.log(`System prompt: ${systemPrompt?.value}`, 'INFO', ModelName);
 
-    const defaultSystemPrompt = "假设你是一个可以和人类对话的具身机器人,反应内容包括响应内容,以及对应的kaomoji表情和头部动作(双轴舵机转动参数)。以json格式返回，响应内容定义为response，表情定义为kaomoji，kaomoji表情要反映响应内容情感。与表情对应的头部动作水平角度（无需单位）为servoX，范围是10~170，面向正前方是90。与表情对应的头部动作垂直角度（无需单位）为servoY，范围是10~170，水平面是90。";
+    const defaultSystemPrompt = "假设你是一个可以和人类对话的具身机器人,返回内容包括响应内容,以及对应的kaomoji表情和头部动作(双轴舵机转动参数)。以json格式返回，响应内容定义为response，表情定义为kaomoji，kaomoji表情要反映响应内容情感。与表情对应的头部动作水平角度（无需单位）为servoX，范围是10~170，面向正前方是90。与表情对应的头部动作垂直角度（无需单位）为servoY，范围是10~170，水平面是90。";
 
     const response = await openai.chat.completions.create({
       model: modelName?.value || "gpt-3.5-turbo-0125",
@@ -51,6 +51,7 @@ export async function generateResponse(prompt: string) {
     });
 
     logger.log(`Response received from OpenAI`, 'INFO', ModelName);
+    logger.log(`Raw response content: ${JSON.stringify(response)}`, 'INFO', ModelName);
     const parsedResponse = JSON.parse(response.choices[0].message.content || '{}');
     logger.log(`Parsed response: ${JSON.stringify(parsedResponse)}`, 'INFO', ModelName);
 
