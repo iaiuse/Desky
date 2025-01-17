@@ -19,16 +19,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let device_manager = Arc::new(DeviceManager::new());
     // 创建应用状态
     let app_state = commands::AppState {
-        device_manager: device_manager.clone(),
+        device_manager: device_manager.clone(), 
     };
 
     tauri::Builder::default()
         .manage(app_state)
-        .setup(|_app| {
+        .setup(|app| {
             setup_logging().expect("Failed to setup logging");
             #[cfg(debug_assertions)]
             {
-                let window = _app.get_window("main").unwrap();
+                let window = app.get_window("main").unwrap();
                 window.open_devtools();
             }
             Ok(())
