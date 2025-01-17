@@ -12,6 +12,7 @@ mod http_client;
 use crate::logger::setup_logging;
 use crate::device_manager::DeviceManager;
 use std::sync::Arc;
+use tauri::Manager; 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,6 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::clear_logs,
             commands::get_serial_ports,
             commands::proxy_request,
+            commands::proxy_request_with_headers,
             commands::check_server_status,
         ])
         .run(tauri::generate_context!())

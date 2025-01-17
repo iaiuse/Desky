@@ -144,3 +144,31 @@ pub async fn check_server_status(
             error_msg
         })
 }
+
+// 添加新的命令处理函数
+#[tauri::command]
+pub async fn proxy_request_with_headers(
+    _window: tauri::Window,
+    target_url: String, 
+    method: String,
+    headers: std::collections::HashMap<String, String>,
+    body: Vec<u8>
+) -> Result<String, String> {
+    let function_name = "proxy_request_with_headers";
+    log_message(
+        format!("[{}] Received request for URL: {}", function_name, target_url),
+        "INFO".to_string(),
+        MODEL_NAME.to_string(),
+    );
+    
+    HTTP_CLIENT.send_request_with_headers(&target_url, &method, headers, body).await
+        .map_err(|e| {
+            let error_msg = format!("[{}] Request failed: {}", function_name, e);
+            log_message(
+                error_msg.clone(),
+                "ERROR".to_string(),
+                MODEL_NAME.to_string(),
+            );
+            error_msg
+        })
+}
