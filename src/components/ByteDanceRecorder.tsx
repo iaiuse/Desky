@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { uploadAudioFile, checkVoiceStatus, VoiceStatus, VoiceStatusResponse, VoiceInfo, listAvailableVoices } from '../lib/bytedanceTts';
 import { logger } from '../utils/logger';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Mic, Square, Upload } from "lucide-react";
 
 const ModelName = "ByteDanceRecorder";
 
@@ -44,6 +46,14 @@ export function ByteDanceRecorder({ onVoiceCloned }: ByteDanceRecorderProps) {
   const [textValidation, setTextValidation] = useState('');
   const [noiseReduction, setNoiseReduction] = useState(true);
   const [volumeNormalization, setVolumeNormalization] = useState(true);
+
+  // Add new recording related state
+  const [isRecording, setIsRecording] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const mediaRecorder = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<Blob[]>([]);
+  const timerRef = useRef<number>();
+  const maxDuration = 300; // 5 minutes in seconds
 
   // 加载可用音色列表
   useEffect(() => {
@@ -217,6 +227,80 @@ export function ByteDanceRecorder({ onVoiceCloned }: ByteDanceRecorderProps) {
     );
   };
 
+  // Add recording functions
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder.current = new MediaRecorder(stream);
+      
+      mediaRecorder.current.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.current.onstop = async () => {
+        const blob = new Blob(chunks.current, { type: 'audio/wav' });
+        const file = new File([blob], `recording-${Date.now()}.wav`, { type: 'audio/wav' });
+        
+        try {
+          setIsUploading(true);
+          const voiceId = await uploadAudioFile(file, selectedVoiceId, {
+            language,
+            modelType,
+            textValidation,
+            noiseReduction,
+            volumeNormalization
+          });
+          
+          setCurrentVoiceId(voiceId);
+          setTrainingStatus({ status: VoiceStatus.Training });
+        } catch (error) {
+          logger.log(`Recording upload failed: ${error}`, 'ERROR', ModelName);
+          alert('上传失败，请重试');
+        } finally {
+          setIsUploading(false);
+        }
+        
+        chunks.current = [];
+        setDuration(0);
+      };
+
+      mediaRecorder.current.start();
+      setIsRecording(true);
+
+      // Start timer
+      timerRef.current = window.setInterval(() => {
+        setDuration(prev => {
+          if (prev >= maxDuration - 1) {
+            stopRecording();
+            return 0;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+
+    } catch (error) {
+      logger.log(`Recording failed: ${error}`, 'ERROR', ModelName);
+      alert('无法访问麦克风');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder.current && isRecording) {
+      mediaRecorder.current.stop();
+      mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
+      clearInterval(timerRef.current);
+      setIsRecording(false);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
@@ -254,24 +338,62 @@ export function ByteDanceRecorder({ onVoiceCloned }: ByteDanceRecorderProps) {
           </div>
         </div>
 
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          accept=".mp3,.wav,.ogg,.m4a,.aac"
-          className="hidden"
-        />
-        <Button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading || !selectedVoiceId}
-          variant="outline"
-          className="w-full"
-        >
-          {isUploading ? '上传中...' : '选择音频文件'}
-        </Button>
-        {isUploading && (
-          <Progress value={uploadProgress} className="w-full" />
-        )}
+        <Tabs defaultValue="record" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="record">实时录音</TabsTrigger>
+            <TabsTrigger value="upload">文件上传</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="record" className="space-y-4">
+            <div className="flex items-center gap-4">
+              {isRecording ? (
+                <Button
+                  variant="destructive"
+                  onClick={stopRecording}
+                  disabled={!selectedVoiceId}
+                  className="gap-2"
+                >
+                  <Square className="h-4 w-4" />
+                  停止录音 ({formatTime(duration)})
+                </Button>
+              ) : (
+                <Button
+                  onClick={startRecording}
+                  disabled={!selectedVoiceId}
+                  className="gap-2"
+                >
+                  <Mic className="h-4 w-4" />
+                  开始录音
+                </Button>
+              )}
+            </div>
+            <div className="text-sm text-muted-foreground">
+              最长录音时间：{Math.floor(maxDuration / 60)}分钟
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="upload" className="space-y-4">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              accept=".mp3,.wav,.ogg,.m4a,.aac"
+              className="hidden"
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading || !selectedVoiceId}
+              variant="outline"
+              className="w-full gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              {isUploading ? '上传中...' : '选择音频文件'}
+            </Button>
+            {isUploading && (
+              <Progress value={uploadProgress} className="w-full" />
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       <div className="space-y-4">
