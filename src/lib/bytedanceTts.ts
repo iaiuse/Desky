@@ -38,17 +38,6 @@ interface TTSRequest {
   };
 }
 
-interface TTSResponse {
-  reqid: string;
-  code: number;
-  message: string;
-  sequence: number;
-  data: string;
-  addition: {
-    duration: string;
-  };
-}
-
 type Language = 0 | 1 | 2 | 3 | 4 | 5;
 
 interface UploadOptions {
