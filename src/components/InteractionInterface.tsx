@@ -28,6 +28,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { generateBytedanceSpeech } from '@/lib/bytedanceTts';
+import { Switch } from "@/components/ui/switch";
+import { messageQueueService } from '../lib/messageQueueService';
+import { voiceRecognitionService } from '../lib/voiceRecognitionService';
 
 const ModelName = "InteractionInterface";
 
@@ -281,6 +284,79 @@ export const InteractionInterface: React.FC = () => {
     }
   };
 
+  const handleSendToApp = async () => {
+    try {
+      logger.log(`Starting app submission with prompt: ${prompt}`, 'INFO', ModelName);
+
+      const result = await generateResponse(prompt);
+      logger.log(`Generated response: ${JSON.stringify(result)}`, 'INFO', ModelName);
+      setResponse(result);
+
+      const audioBuffer = await generateAudioForResponse(result.response, selectedVoice);
+      logger.log(`Generated speech buffer size: ${audioBuffer.byteLength}`, 'DEBUG', ModelName);
+      setAudioBuffer(audioBuffer);
+
+      // 发送到消息队列
+      await messageQueueService.addMessage(
+        result.kaomoji || 'neutral',
+        audioBuffer
+      );
+      logger.log('Message added to app queue successfully', 'INFO', ModelName);
+
+    } catch (error) {
+      logger.log(`Error in app submission: ${error}`, 'ERROR', ModelName);
+    }
+  };
+
+  // 处理语音识别结果
+  const handleVoiceResult = (text: string) => {
+    setPrompt(text);
+  };
+
+  const handleVoiceRecognitionChange = async (enabled: boolean) => {
+    setIsVoiceRecognitionEnabled(enabled);
+    try {
+      if (enabled) {
+        setIsRecording(true);
+        // 初始化并启动语音识别
+        await voiceRecognitionService.initialize();
+        await voiceRecognitionService.start(handleVoiceResult);
+        
+        // 添加事件监听
+        voiceRecognitionService.addEventListener({
+          onError: (error) => {
+            logger.log(`Voice recognition error: ${error}`, 'ERROR', ModelName);
+            setIsRecording(false);
+            setIsVoiceRecognitionEnabled(false);
+          },
+          onDisconnected: () => {
+            setIsRecording(false);
+            setIsVoiceRecognitionEnabled(false);
+          }
+        });
+      } else {
+        setIsRecording(false);
+        // 停止语音识别
+        await voiceRecognitionService.stop();
+        voiceRecognitionService.removeEventListener();
+      }
+    } catch (error) {
+      logger.log(`Error handling voice recognition: ${error}`, 'ERROR', ModelName);
+      setIsRecording(false);
+      setIsVoiceRecognitionEnabled(false);
+    }
+  };
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      if (isVoiceRecognitionEnabled) {
+        voiceRecognitionService.stop();
+        voiceRecognitionService.removeEventListener();
+      }
+    };
+  }, [isVoiceRecognitionEnabled]);
+
   return (
     <div className="container max-w-[1100px] mx-auto p-6 space-y-8">
       <Card>
@@ -325,7 +401,7 @@ export const InteractionInterface: React.FC = () => {
               <label className="text-sm">语音识别</label>
               <Switch
                 checked={isVoiceRecognitionEnabled}
-                onCheckedChange={setIsVoiceRecognitionEnabled}
+                onCheckedChange={handleVoiceRecognitionChange}
               />
               {isRecording && <span className="text-sm text-green-500">录音中...</span>}
             </div>
