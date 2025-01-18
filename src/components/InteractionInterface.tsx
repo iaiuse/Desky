@@ -27,6 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { generateBytedanceSpeech } from '@/lib/bytedanceTts';
 
 const ModelName = "InteractionInterface";
 
@@ -59,7 +60,7 @@ export const InteractionInterface: React.FC = () => {
     deviceName: 'Default Device'
   });
   const [audioBuffer, setAudioBuffer] = useState<ArrayBuffer | null>(null);
-  const [voices, setVoices] = useState<Array<{ id: string, name: string }>>(defaultVoices);
+  const [voices, setVoices] = useState<Array<CustomVoice | { id: string; name: string; }>>(defaultVoices);
   const [selectedVoice, setSelectedVoice] = useState<string>(defaultVoices[0].id);
   const [isVoiceCloningOpen, setIsVoiceCloningOpen] = useState(false);
   const [voiceToDelete, setVoiceToDelete] = useState<string | null>(null);
@@ -167,13 +168,34 @@ export const InteractionInterface: React.FC = () => {
     try {
       logger.log(`Starting chat submission with prompt: ${prompt}`, 'INFO', ModelName);
 
-      // 生成回复
       const result = await generateResponse(prompt);
       logger.log(`Generated response: ${JSON.stringify(result)}`, 'INFO', ModelName);
       setResponse(result);
 
-      // 生成语音
-      const audioBuffer = await generateSpeech(result.response, selectedVoice);
+      const selectedVoiceConfig = voices.find(voice => voice.id === selectedVoice);
+      if (!selectedVoiceConfig) {
+        throw new Error('Selected voice not found');
+      }
+
+      let audioBuffer: ArrayBuffer;
+      if ('isCustom' in selectedVoiceConfig) {
+        if (selectedVoiceConfig.provider === 'bytedance') {
+          if (!selectedVoiceConfig.speakerId) {
+            throw new Error('Speaker ID not found for bytedance voice');
+          }
+          audioBuffer = await generateBytedanceSpeech(result.response, selectedVoiceConfig.speakerId);
+        } else {
+          // Minimax case
+          if (!selectedVoiceConfig.modelPath) {
+            throw new Error('Model path not found for minimax voice');
+          }
+          throw new Error('Minimax TTS not implemented yet');
+        }
+      } else {
+        // Default TTS case
+        audioBuffer = await generateSpeech(result.response, selectedVoiceConfig.id);
+      }
+
       logger.log(`Generated speech buffer size: ${audioBuffer.byteLength}`, 'DEBUG', ModelName);
       setAudioBuffer(audioBuffer);
 
@@ -232,20 +254,22 @@ export const InteractionInterface: React.FC = () => {
   const handleVoiceCloned = async (voiceId: string, name: string) => {
     try {
       const customVoice: CustomVoice = {
-        id: voiceId,
+        id: '',  // 会在 addCustomVoice 中生成
         name: name,
         isCustom: true,
-        originalVoiceId: voiceId
+        provider: 'bytedance',
+        originalVoiceId: voiceId,
+        speakerId: voiceId,
+        modelPath: ''
       };
 
-      await addCustomVoice(customVoice);
+      const newId = await addCustomVoice(customVoice);
       
       // 重新加载语音列表
       const voicesSetting = await db.settings.get('voices');
       if (voicesSetting) {
         setVoices(voicesSetting.value);
-        // 自动选择新创建的语音
-        setSelectedVoice(voiceId);
+        setSelectedVoice(newId);
       }
     } catch (error) {
       logger.log(`Error adding cloned voice: ${error}`, 'ERROR', ModelName);

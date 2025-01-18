@@ -123,4 +123,83 @@ impl HttpClient {
         // 返回状态码是否为200
         Ok(response.status().as_u16() == 200)
     }
+
+    pub async fn proxy_request_with_headers(
+        &self,
+        target_url: &str,
+        method: &str,
+        headers: std::collections::HashMap<String, String>,
+        body: Vec<u8>,
+    ) -> Result<Response> {
+        log_message(
+            format!("Proxying {} request to {} with headers", method, target_url),
+            "DEBUG".to_string(),
+            MODEL_NAME.to_string(),
+        );
+
+        // 根据HTTP方法构建请求
+        let mut request_builder = match method {
+            "GET" => self.client.get(target_url),
+            "POST" => self.client.post(target_url),
+            _ => {
+                log_message(
+                    format!("Unsupported HTTP method: {}", method),
+                    "ERROR".to_string(),
+                    MODEL_NAME.to_string(),
+                );
+                return Err(anyhow::anyhow!("Unsupported HTTP method"));
+            }
+        };
+
+        // 添加headers
+        for (key, value) in headers {
+            // 在日志记录前先克隆值
+            let key_clone = key.clone();
+            let value_clone = value.clone();
+            
+            log_message(
+                format!("Adding header: {} = {}", key_clone, value_clone),
+                "DEBUG".to_string(),
+                MODEL_NAME.to_string(),
+            );
+
+            request_builder = request_builder.header(key, value);
+        }
+
+        // 添加body并发送请求
+        let response = request_builder.body(body).send().await?;
+        
+        log_message(
+            format!(
+                "Received response: Status={}, Content-Length={:?}",
+                response.status(),
+                response.headers().get("content-length")
+            ),
+            "INFO".to_string(),
+            MODEL_NAME.to_string(),
+        );
+
+        Ok(response)
+    }
+
+    pub async fn send_request_with_headers(
+        &self,
+        target_url: &str,
+        method: &str,
+        headers: std::collections::HashMap<String, String>,
+        body: Vec<u8>
+    ) -> Result<String, String> {
+        let function_name = "send_request_with_headers";
+        log_message(
+            format!("[{}] Sending {} request to {}", function_name, method, target_url),
+            "DEBUG".to_string(),
+            MODEL_NAME.to_string(),
+        );
+
+        let response = self.proxy_request_with_headers(target_url, method, headers, body).await
+            .map_err(|e| format!("Request failed: {}", e))?;
+            
+        response.text().await
+            .map_err(|e| format!("Failed to parse response: {}", e))
+    }
 }
