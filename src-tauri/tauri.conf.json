@@ -26,8 +26,9 @@
         "scope": ["$APP/*", "$RESOURCE/*", "$APPDATA/*"]
       },
       "http": {
-        "all": false,
-        "request": true
+        "all": true,
+        "request": true,
+        "scope": ["http://localhost:3030/*"]
       },
       "dialog": {
         "all": true

@@ -28,6 +28,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { generateBytedanceSpeech } from '@/lib/bytedanceTts';
+import { messageQueueService } from '../lib/messageQueueService';
+
 
 const ModelName = "InteractionInterface";
 
@@ -163,6 +165,32 @@ export const InteractionInterface: React.FC = () => {
     }
   };
 
+  // 添加新的生成语音函数
+  const generateAudioForResponse = async (text: string, selectedVoiceId: string): Promise<ArrayBuffer> => {
+    const selectedVoiceConfig = voices.find(voice => voice.id === selectedVoiceId);
+    if (!selectedVoiceConfig) {
+      throw new Error('Selected voice not found');
+    }
+
+    if ('isCustom' in selectedVoiceConfig) {
+      if (selectedVoiceConfig.provider === 'bytedance') {
+        if (!selectedVoiceConfig.speakerId) {
+          throw new Error('Speaker ID not found for bytedance voice');
+        }
+        return await generateBytedanceSpeech(text, selectedVoiceConfig.speakerId);
+      } else {
+        // Minimax case
+        if (!selectedVoiceConfig.modelPath) {
+          throw new Error('Model path not found for minimax voice');
+        }
+        throw new Error('Minimax TTS not implemented yet');
+      }
+    } else {
+      // Default TTS case
+      return await generateSpeech(text, selectedVoiceConfig.id);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -172,30 +200,7 @@ export const InteractionInterface: React.FC = () => {
       logger.log(`Generated response: ${JSON.stringify(result)}`, 'INFO', ModelName);
       setResponse(result);
 
-      const selectedVoiceConfig = voices.find(voice => voice.id === selectedVoice);
-      if (!selectedVoiceConfig) {
-        throw new Error('Selected voice not found');
-      }
-
-      let audioBuffer: ArrayBuffer;
-      if ('isCustom' in selectedVoiceConfig) {
-        if (selectedVoiceConfig.provider === 'bytedance') {
-          if (!selectedVoiceConfig.speakerId) {
-            throw new Error('Speaker ID not found for bytedance voice');
-          }
-          audioBuffer = await generateBytedanceSpeech(result.response, selectedVoiceConfig.speakerId);
-        } else {
-          // Minimax case
-          if (!selectedVoiceConfig.modelPath) {
-            throw new Error('Model path not found for minimax voice');
-          }
-          throw new Error('Minimax TTS not implemented yet');
-        }
-      } else {
-        // Default TTS case
-        audioBuffer = await generateSpeech(result.response, selectedVoiceConfig.id);
-      }
-
+      const audioBuffer = await generateAudioForResponse(result.response, selectedVoice);
       logger.log(`Generated speech buffer size: ${audioBuffer.byteLength}`, 'DEBUG', ModelName);
       setAudioBuffer(audioBuffer);
 
@@ -276,6 +281,30 @@ export const InteractionInterface: React.FC = () => {
     }
   };
 
+  const handleSendToApp = async () => {
+    try {
+      logger.log(`Starting app submission with prompt: ${prompt}`, 'INFO', ModelName);
+
+      const result = await generateResponse(prompt);
+      logger.log(`Generated response: ${JSON.stringify(result)}`, 'INFO', ModelName);
+      setResponse(result);
+
+      const audioBuffer = await generateAudioForResponse(result.response, selectedVoice);
+      logger.log(`Generated speech buffer size: ${audioBuffer.byteLength}`, 'DEBUG', ModelName);
+      setAudioBuffer(audioBuffer);
+
+      // 直接使用 ArrayBuffer 发送
+      await messageQueueService.addMessage(
+        result.kaomoji || 'neutral',
+        audioBuffer
+      );
+      logger.log('Message added to app queue successfully', 'INFO', ModelName);
+
+    } catch (error) {
+      logger.log(`Error in app submission: ${error}`, 'ERROR', ModelName);
+    }
+  };
+
   return (
     <div className="container max-w-[1100px] mx-auto p-6 space-y-8">
       <Card>
@@ -326,7 +355,17 @@ export const InteractionInterface: React.FC = () => {
               placeholder="在这里输入你想说的话..."
               className="mb-4"
             />
-            <Button type="submit">发送</Button>
+            <div className="flex gap-2">
+              <Button type="submit">发送</Button>
+              <Button 
+                type="button" 
+                variant="secondary"
+                onClick={handleSendToApp}
+                disabled={!prompt}
+              >
+                发送App
+              </Button>
+            </div>
           </form>
           {response && (
             <div className="mt-4">

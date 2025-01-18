@@ -20,10 +20,19 @@ const App: React.FC = () => {
     const checkConfiguration = async () => {
       try {
         const settings = await db.settings.toArray();
-        const requiredSettings = ['apiUrl', 'apiKey', 'modelName', 'deviceName', 'phoneIpAddress', 'serialPort'];
-        const isConfigured = requiredSettings.every(key => 
-          settings.some(setting => setting.key === key && setting.value)
+        const requiredSettings = ['apiUrl', 'apiKey', 'modelName', 'deviceName', 'serialPort'];
+        const missingSettings = requiredSettings.filter(key => 
+          !settings.some(setting => setting.key === key && setting.value)
         );
+        
+        if (missingSettings.length > 0) {
+          console.log("以下设置未配置:", missingSettings);
+        } else {
+          console.log("所有设置均已配置。");
+        }
+        
+        const isConfigured = missingSettings.length === 0;
+        
         setIsConfigured(isConfigured);
       } catch (error) {
         console.error('Failed to check configuration:', error);
