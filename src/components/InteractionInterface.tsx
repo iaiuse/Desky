@@ -28,6 +28,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { generateBytedanceSpeech } from '@/lib/bytedanceTts';
+import { messageQueueService } from '../lib/messageQueueService';
+import { Switch } from "@/components/ui/switch";
+import { voiceRecognitionService } from '../lib/voiceRecognitionService';
+
 
 const ModelName = "InteractionInterface";
 
@@ -64,6 +68,8 @@ export const InteractionInterface: React.FC = () => {
   const [selectedVoice, setSelectedVoice] = useState<string>(defaultVoices[0].id);
   const [isVoiceCloningOpen, setIsVoiceCloningOpen] = useState(false);
   const [voiceToDelete, setVoiceToDelete] = useState<string | null>(null);
+  const [isVoiceRecognitionEnabled, setIsVoiceRecognitionEnabled] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
 
   useEffect(() => {
     const loadVoices = async () => {
@@ -163,6 +169,32 @@ export const InteractionInterface: React.FC = () => {
     }
   };
 
+  // 添加新的生成语音函数
+  const generateAudioForResponse = async (text: string, selectedVoiceId: string): Promise<ArrayBuffer> => {
+    const selectedVoiceConfig = voices.find(voice => voice.id === selectedVoiceId);
+    if (!selectedVoiceConfig) {
+      throw new Error('Selected voice not found');
+    }
+
+    if ('isCustom' in selectedVoiceConfig) {
+      if (selectedVoiceConfig.provider === 'bytedance') {
+        if (!selectedVoiceConfig.speakerId) {
+          throw new Error('Speaker ID not found for bytedance voice');
+        }
+        return await generateBytedanceSpeech(text, selectedVoiceConfig.speakerId);
+      } else {
+        // Minimax case
+        if (!selectedVoiceConfig.modelPath) {
+          throw new Error('Model path not found for minimax voice');
+        }
+        throw new Error('Minimax TTS not implemented yet');
+      }
+    } else {
+      // Default TTS case
+      return await generateSpeech(text, selectedVoiceConfig.id);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -172,30 +204,7 @@ export const InteractionInterface: React.FC = () => {
       logger.log(`Generated response: ${JSON.stringify(result)}`, 'INFO', ModelName);
       setResponse(result);
 
-      const selectedVoiceConfig = voices.find(voice => voice.id === selectedVoice);
-      if (!selectedVoiceConfig) {
-        throw new Error('Selected voice not found');
-      }
-
-      let audioBuffer: ArrayBuffer;
-      if ('isCustom' in selectedVoiceConfig) {
-        if (selectedVoiceConfig.provider === 'bytedance') {
-          if (!selectedVoiceConfig.speakerId) {
-            throw new Error('Speaker ID not found for bytedance voice');
-          }
-          audioBuffer = await generateBytedanceSpeech(result.response, selectedVoiceConfig.speakerId);
-        } else {
-          // Minimax case
-          if (!selectedVoiceConfig.modelPath) {
-            throw new Error('Model path not found for minimax voice');
-          }
-          throw new Error('Minimax TTS not implemented yet');
-        }
-      } else {
-        // Default TTS case
-        audioBuffer = await generateSpeech(result.response, selectedVoiceConfig.id);
-      }
-
+      const audioBuffer = await generateAudioForResponse(result.response, selectedVoice);
       logger.log(`Generated speech buffer size: ${audioBuffer.byteLength}`, 'DEBUG', ModelName);
       setAudioBuffer(audioBuffer);
 
@@ -276,6 +285,106 @@ export const InteractionInterface: React.FC = () => {
     }
   };
 
+  const handleSendToApp = async () => {
+    try {
+      logger.log(`Starting app submission with prompt: ${prompt}`, 'INFO', ModelName);
+
+      const result = await generateResponse(prompt);
+      logger.log(`Generated response: ${JSON.stringify(result)}`, 'INFO', ModelName);
+      setResponse(result);
+
+      const audioBuffer = await generateAudioForResponse(result.response, selectedVoice);
+      logger.log(`Generated speech buffer size: ${audioBuffer.byteLength}`, 'DEBUG', ModelName);
+      setAudioBuffer(audioBuffer);
+
+      // 直接使用 ArrayBuffer 发送
+      await messageQueueService.addMessage(
+        result.kaomoji || 'neutral',
+        audioBuffer
+      );
+      logger.log('Message added to app queue successfully', 'INFO', ModelName);
+
+    } catch (error) {
+      logger.log(`Error in app submission: ${error}`, 'ERROR', ModelName);
+    }
+  };
+
+  // 修改语音识别相关函数
+  const startVoiceRecognition = async () => {
+    try {
+      logger.log('Starting voice recognition', 'INFO', ModelName);
+      
+      await voiceRecognitionService.start((text) => {
+        if (text) {
+          setPrompt(text); // 将识别的文本设置到输入框
+        }
+      });
+
+      setIsRecording(true);
+    } catch (error) {
+      logger.log(`Error starting voice recognition: ${error}`, 'ERROR', ModelName);
+      setIsVoiceRecognitionEnabled(false);
+      setIsRecording(false);
+      alert(error instanceof Error ? error.message : '启动语音识别失败，请检查设置');
+    }
+  };
+
+  const stopVoiceRecognition = async () => {
+    try {
+      await voiceRecognitionService.stop();
+      setIsRecording(false);
+      logger.log('Voice recognition stopped', 'INFO', ModelName);
+    } catch (error) {
+      logger.log(`Error stopping voice recognition: ${error}`, 'ERROR', ModelName);
+    }
+  };
+
+  // 初始化语音识别服务
+  useEffect(() => {
+    const initVoiceService = async () => {
+      try {
+        await voiceRecognitionService.initialize();
+        voiceRecognitionService.addEventListener({
+          onConnected: () => {
+            logger.log('Voice service connected', 'INFO', ModelName);
+          },
+          onDisconnected: () => {
+            logger.log('Voice service disconnected', 'INFO', ModelName);
+            setIsRecording(false);
+          },
+          onError: (error) => {
+            logger.log(`Voice service error: ${error}`, 'ERROR', ModelName);
+            setIsRecording(false);
+            setIsVoiceRecognitionEnabled(false); // 出错时关闭开关
+            alert('语音服务出错：' + error.message);
+          },
+          onComplete: (finalText) => {
+            setPrompt(finalText); // 设置最终识别结果
+            // 可以选择自动提交
+            // handleSubmit(new Event('submit') as any);
+          }
+        });
+      } catch (error) {
+        logger.log(`Failed to initialize voice service: ${error}`, 'ERROR', ModelName);
+      }
+    };
+
+    initVoiceService();
+    return () => {
+      voiceRecognitionService.removeEventListener();
+      stopVoiceRecognition(); // 组件卸载时确保停止语音识别
+    };
+  }, []);
+
+  // 监听语音识别开关状态
+  useEffect(() => {
+    if (isVoiceRecognitionEnabled) {
+      startVoiceRecognition();
+    } else {
+      stopVoiceRecognition();
+    }
+  }, [isVoiceRecognitionEnabled]);
+
   return (
     <div className="container max-w-[1100px] mx-auto p-6 space-y-8">
       <Card>
@@ -316,6 +425,14 @@ export const InteractionInterface: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
+            <div className="flex items-center gap-2">
+              <label className="text-sm">语音识别</label>
+              <Switch
+                checked={isVoiceRecognitionEnabled}
+                onCheckedChange={setIsVoiceRecognitionEnabled}
+              />
+              {isRecording && <span className="text-sm text-green-500">录音中...</span>}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -326,7 +443,17 @@ export const InteractionInterface: React.FC = () => {
               placeholder="在这里输入你想说的话..."
               className="mb-4"
             />
-            <Button type="submit">发送</Button>
+            <div className="flex gap-2">
+              <Button type="submit">发送</Button>
+              <Button 
+                type="button" 
+                variant="secondary"
+                onClick={handleSendToApp}
+                disabled={!prompt}
+              >
+                发送App
+              </Button>
+            </div>
           </form>
           {response && (
             <div className="mt-4">
