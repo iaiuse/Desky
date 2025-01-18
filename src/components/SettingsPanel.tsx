@@ -9,6 +9,7 @@ import { db } from '../lib/db';
 import { useSerialPorts } from '../hooks/useSerialPorts';
 import { RefreshCw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
+import { Label } from "@/components/ui/label";
 
 interface Device {
   deviceId: string;
@@ -38,6 +39,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     bytedance_tts_appId: '',
     bytedance_tts_token: '',
     bytedance_tts_cluster: '',
+    bytedance_tts_voiceAppId: '',
+    bytedance_tts_voiceAccessToken: '',
+    bytedance_tts_asrAppId: '',
+    tencent_asr_appId: '',
+    tencent_asr_secretId: '',
+    tencent_asr_secretKey: ''
   });
 
   const [devices, setDevices] = useState<Device[]>([]);
@@ -78,7 +85,29 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
     }));
   };
 
-  const saveSettings = async () => {
+  const validateVoiceSettings = () => {
+    const { bytedance_tts_voiceAppId, bytedance_tts_voiceAccessToken } = settings;
+    const missingFields = [];
+    
+    if (!bytedance_tts_voiceAppId) {
+      missingFields.push('语音应用ID');
+    }
+    if (!bytedance_tts_voiceAccessToken) {
+      missingFields.push('访问令牌');
+    }
+    
+    if (missingFields.length > 0) {
+      alert(`请完善以下语音识别设置：\n${missingFields.join('\n')}`);
+      return false;
+    }
+    return true;
+  };
+
+  const handleSave = async () => {
+    if (!validateVoiceSettings()) {
+      console.error('Voice recognition settings are incomplete');
+      return;
+    }
     const settingsToSave = Object.entries(settings).map(([key, value]) => ({
       key,
       value
@@ -151,6 +180,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
           <TabsTrigger value="device">设备设置</TabsTrigger>
           <TabsTrigger value="tts">TTS设置</TabsTrigger>
           <TabsTrigger value="bytedance_tts">ByteDance TTS设置</TabsTrigger>
+          <TabsTrigger value="bytedance_shibie">ByteDance 实时语音识别设置</TabsTrigger>
+          <TabsTrigger value="tentcent_asr">腾讯云 实时语音识别设置</TabsTrigger>
         </TabsList>
         <TabsContent value="api">
           <Card>
@@ -344,6 +375,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
                 <div>
                   <label className="block mb-1">Token</label>
                   <Input
+                  type="password"
                     value={settings.bytedance_tts_token}
                     onChange={(e) => handleChange('bytedance_tts_token', e.target.value)}
                   />
@@ -355,12 +387,76 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ setIsConfigured })
                     onChange={(e) => handleChange('bytedance_tts_cluster', e.target.value)}
                   />
                 </div>
+                
               </div>
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="bytedance_shibie">
+          <Card>
+            <CardHeader>ByteDance 实时语音识别设置</CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="pt-6">
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="voiceAppId">语音应用ID</Label>
+                      <Input
+                        id="voiceAppId"
+                        value={settings.bytedance_tts_voiceAppId}
+                        onChange={(e) => handleChange('bytedance_tts_voiceAppId', e.target.value)}
+                        placeholder="输入语音应用ID"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="voiceAccessToken">访问令牌</Label>
+                      <Input
+                        id="voiceAccessToken"
+                        value={settings.bytedance_tts_voiceAccessToken}
+                        onChange={(e) => handleChange('bytedance_tts_voiceAccessToken', e.target.value)}
+                        placeholder="输入访问令牌"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="tentcent_asr"> 
+          <Card>
+            <CardHeader>腾讯云 实时语音识别设置</CardHeader>
+            <CardContent>
+              <div className="space-y-4"> 
+                <div>
+                  <label className="block mb-1">App ID</label>
+                  <Input
+                    value={settings.tencent_asr_appId}
+                    onChange={(e) => handleChange('tencent_asr_appId', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">Secret ID</label>
+                  <Input
+                    value={settings.tencent_asr_secretId}
+                    onChange={(e) => handleChange('tencent_asr_secretId', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1">Secret Key</label>
+                  <Input
+                    type="password"
+                    value={settings.tencent_asr_secretKey}
+                    onChange={(e) => handleChange('tencent_asr_secretKey', e.target.value)}
+                  />
+                </div>
+              </div>
+                        
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
-      <Button onClick={saveSettings} className="mt-4">保存所有设置</Button>
+      <Button onClick={handleSave} className="mt-4">保存所有设置</Button>
     </div>
   );
 };

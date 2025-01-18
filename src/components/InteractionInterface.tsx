@@ -28,8 +28,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { generateBytedanceSpeech } from '@/lib/bytedanceTts';
-import { messageQueueService } from '../lib/messageQueueService';
-
 
 const ModelName = "InteractionInterface";
 
@@ -66,6 +64,8 @@ export const InteractionInterface: React.FC = () => {
   const [selectedVoice, setSelectedVoice] = useState<string>(defaultVoices[0].id);
   const [isVoiceCloningOpen, setIsVoiceCloningOpen] = useState(false);
   const [voiceToDelete, setVoiceToDelete] = useState<string | null>(null);
+  const [isVoiceRecognitionEnabled, setIsVoiceRecognitionEnabled] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
 
   useEffect(() => {
     const loadVoices = async () => {
@@ -281,30 +281,6 @@ export const InteractionInterface: React.FC = () => {
     }
   };
 
-  const handleSendToApp = async () => {
-    try {
-      logger.log(`Starting app submission with prompt: ${prompt}`, 'INFO', ModelName);
-
-      const result = await generateResponse(prompt);
-      logger.log(`Generated response: ${JSON.stringify(result)}`, 'INFO', ModelName);
-      setResponse(result);
-
-      const audioBuffer = await generateAudioForResponse(result.response, selectedVoice);
-      logger.log(`Generated speech buffer size: ${audioBuffer.byteLength}`, 'DEBUG', ModelName);
-      setAudioBuffer(audioBuffer);
-
-      // 直接使用 ArrayBuffer 发送
-      await messageQueueService.addMessage(
-        result.kaomoji || 'neutral',
-        audioBuffer
-      );
-      logger.log('Message added to app queue successfully', 'INFO', ModelName);
-
-    } catch (error) {
-      logger.log(`Error in app submission: ${error}`, 'ERROR', ModelName);
-    }
-  };
-
   return (
     <div className="container max-w-[1100px] mx-auto p-6 space-y-8">
       <Card>
@@ -345,6 +321,14 @@ export const InteractionInterface: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
+            <div className="flex items-center gap-2">
+              <label className="text-sm">语音识别</label>
+              <Switch
+                checked={isVoiceRecognitionEnabled}
+                onCheckedChange={setIsVoiceRecognitionEnabled}
+              />
+              {isRecording && <span className="text-sm text-green-500">录音中...</span>}
+            </div>
           </div>
         </CardHeader>
         <CardContent>

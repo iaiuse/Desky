@@ -37,6 +37,7 @@
     "axios": "^1.7.7",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "crypt-js": "^1.0.4",
     "date-fns": "^4.1.0",
     "dexie": "^4.0.8",
     "face-api.js": "^0.22.2",
